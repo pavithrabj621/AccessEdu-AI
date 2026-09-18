@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="AccessEdu AI accessibility assistance platform for Paavai Engineering College">
+  <title>AccessEdu AI — Paavai Engineering College</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">◈</div>
+      <div>
+        <strong>AccessEdu AI</strong>
+        <span>Paavai Engineering College</span>
+      </div>
+    </div>
+
+    <div class="top-actions" aria-label="Accessibility controls">
+      <label class="language-label" for="languageSelect">Language</label>
+      <select id="languageSelect" aria-label="Choose language">
+        <option>English</option>
+        <option>தமிழ்</option>
+        <option>हिन्दी</option>
+        <option>മലയാളം</option>
+      </select>
+      <button class="icon-btn" id="contrastBtn" aria-label="Toggle high contrast mode" title="High contrast">◐</button>
+      <button class="small-btn" id="fontDown" aria-label="Decrease font size">A−</button>
+      <button class="small-btn" id="fontUp" aria-label="Increase font size">A+</button>
+      <button class="icon-btn" id="readPageBtn" aria-label="Read page aloud">🔊</button>
+      <button class="icon-btn primary" id="voiceBtn" aria-label="Activate voice assistant">🎙</button>
+      <button class="admin-btn" id="adminBtn" aria-label="Open admin portal">🔒 Admin</button>
+    </div>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <section class="hero section-shell" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="eyebrow">Inclusive campus • Independent learning</p>
+        <h1 id="heroTitle">Your campus, made more accessible.</h1>
+        <p class="hero-text">
+          Voice-enabled academic support, accessible navigation, campus services,
+          and emergency assistance in one simple platform.
+        </p>
+        <div class="hero-actions">
+          <button class="primary-btn" data-scroll="services">Explore services</button>
+          <button class="secondary-btn" id="heroVoiceBtn">🎙 Try voice commands</button>
+        </div>
+        <p class="voice-status" id="voiceStatus" role="status" aria-live="polite">
+          Voice assistant ready. Select the microphone to begin.
+        </p>
+      </div>
+      <div class="hero-visual" aria-label="Illustration of accessible campus support">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="hero-card">
+          <span class="hero-icon" aria-hidden="true">♿</span>
+          <strong>Access for everyone</strong>
+          <span>Voice • Visual • Mobility • Cognitive</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell" id="services" aria-labelledby="servicesTitle">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Core modules</p>
+          <h2 id="servicesTitle">Support when you need it</h2>
+        </div>
+        <span class="section-note">Voice-enabled</span>
+      </div>
+
+      <div class="service-grid">
+        <article class="service-card featured">
+          <div class="card-icon">🧭</div>
+          <h3>AccessPath AI</h3>
+          <p>Accessible campus navigation with walking routes and destination support.</p>
+          <a class="card-link" href="{{ accesspath_url }}" target="_blank" rel="noopener">Open AccessPath AI ↗</a>
+        </article>
+
+        <article class="service-card">
+          <div class="card-icon">🤖</div>
+          <h3>Academic Bot</h3>
+          <p>Ask academic questions, get study support, and explore course information.</p>
+          <a class="card-link" href="{{ academic_bot_url }}" target="_blank" rel="noopener">Open Academic Bot ↗</a>
+        </article>
+
+        <article class="service-card announcement-card" data-announce-link="{{ announcements_url }}" tabindex="0" role="button" aria-label="Open announcements">
+          <div class="card-icon">📢</div>
+          <h3>Announcements</h3>
+          <p>Read campus notices in a clean, screen-reader-friendly format.</p>
+          <button class="text-btn" data-panel="announcementsPanel">View announcements →</button>
+        </article>
+
+        <article class="service-card">
+          <div class="card-icon">🧰</div>
+          <h3>Campus Toolkit</h3>
+          <p>Access outpass, exam slots, food ordering, and marketplace services.</p>
+          <button class="text-btn" data-panel="toolkitPanel">Open toolkit →</button>
+        </article>
+
+        <article class="service-card sos-card">
+          <div class="card-icon">🆘</div>
+          <h3>SOS Emergency</h3>
+          <p>Send an emergency request with your location when supported by your device.</p>
+          <button class="danger-btn" id="sosBtn">Activate SOS</button>
+        </article>
+      </div>
+    </section>
+
+    <section class="section-shell panels" aria-label="Service details">
+      <div class="panel" id="announcementsPanel">
+        <div class="panel-heading">
+          <h2>Recent announcements</h2>
+          <button class="small-btn" data-close="announcementsPanel" aria-label="Close announcements">×</button>
+        </div>
+        <div id="announcementList" aria-live="polite">
+          <p>Loading announcements…</p>
+        </div>
+      </div>
+
+      <div class="panel" id="toolkitPanel">
+        <div class="panel-heading">
+          <h2>Campus toolkit</h2>
+          <button class="small-btn" data-close="toolkitPanel" aria-label="Close toolkit">×</button>
+        </div>
+        <div class="toolkit-grid">
+          <a class="tool-item" href="{{ url_for('outpass_tool') }}">🚪 <span>Outpass</span></a>
+          <a class="tool-item" href="{{ url_for('exam_booking_tool') }}">🗓 <span>Exam booking</span></a>
+          <a class="tool-item" href="{{ url_for('food_ordering_tool') }}">🍱 <span>Food ordering</span></a>
+          <a class="tool-item" href="{{ url_for('marketplace_tool') }}">📚 <span>Marketplace</span></a>
+        </div>
+        <p class="panel-help" id="toolkitStatus" role="status">Choose a service to open its dedicated page.</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Primary navigation">
+    <button class="bottom-item" data-action="academic-bot" aria-label="Open Academic Bot">
+      <span>🤖</span><small>Bot</small>
+    </button>
+    <button class="bottom-item" data-action="accesspath-ai" aria-label="Open AccessPath AI">
+      <span>🧭</span><small>Path</small>
+    </button>
+    <button class="bottom-item sos-bottom" data-action="sos" aria-label="Activate SOS">
+      <span>⚠</span><small>SOS</small>
+    </button>
+    <button class="bottom-item" data-action="announcements" aria-label="View announcements">
+      <span>📢</span><small>News</small>
+    </button>
+    <button class="bottom-item" data-action="toolkit" aria-label="Open campus toolkit">
+      <span>🧰</span><small>Tools</small>
+    </button>
+  </nav>
+
+  <footer class="site-footer" aria-label="Footer information">
+    <span>AccessEdu AI</span>
+    <span>•</span>
+    <span>Help</span>
+    <span>•</span>
+    <span>Safety</span>
+    <span>•</span>
+    <span>Support</span>
+  </footer>
+
+  <div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+  <script>
+    window.APP_CONFIG = {
+      accesspathUrl: {{ accesspath_url|tojson }},
+      academicBotUrl: {{ academic_bot_url|tojson }},
+      announcementsUrl: {{ announcements_url|tojson }}
+    };
+  </script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

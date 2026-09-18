@@ -1,0 +1,10 @@
+{% extends "toolkit_base.html" %}
+{% block form %}
+<div class="form-grid">
+  <div class="form-field"><label for="studentName">Student name</label><input id="studentName" name="student_name" required autocomplete="name"></div>
+  <div class="form-field"><label for="registerNumber">Register number</label><input id="registerNumber" name="register_number" required></div>
+  <div class="form-field"><label for="examDate">Preferred date</label><input id="examDate" name="exam_date" type="date" required></div>
+  <div class="form-field"><label for="slot">Preferred slot</label><select id="slot" name="slot" required><option value="">Choose a slot</option><option>Morning</option><option>Afternoon</option></select></div>
+  <div class="form-field full"><label for="support">Accessibility support needed</label><textarea id="support" name="support" placeholder="Reader, scribe, extra time, accessible room, or none"></textarea></div>
+</div>
+{% endblock %}

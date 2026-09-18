@@ -1,0 +1,373 @@
+(() => {
+  const root = document.documentElement;
+  const body = document.body;
+  const voiceStatus = document.getElementById("voiceStatus");
+  const liveRegion = document.getElementById("liveRegion");
+
+  const announce = (message) => {
+    liveRegion.textContent = message;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const openAnnouncementWindow = () => {
+    const url = window.APP_CONFIG?.announcementsUrl || "https://niviks20.github.io/announcement/";
+    if (window.__accesseduAnnouncementsTab && !window.__accesseduAnnouncementsTab.closed) {
+      window.__accesseduAnnouncementsTab.location.href = url;
+      window.__accesseduAnnouncementsTab.focus();
+      return;
+    }
+
+    window.__accesseduAnnouncementsTab = window.open(url, "accesseduAnnouncements");
+    if (!window.__accesseduAnnouncementsTab) {
+      window.location.href = url;
+    }
+  };
+
+  const openPanel = (id) => {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.classList.add("open");
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const closePanel = (id) => {
+    const panel = document.getElementById(id);
+    if (panel) panel.classList.remove("open");
+  };
+
+  const toolkitPages = {
+    outpass: "/toolkit/outpass",
+    "out pass": "/toolkit/outpass",
+    exam: "/toolkit/exam-booking",
+    "exam booking": "/toolkit/exam-booking",
+    "counter slot": "/toolkit/exam-booking",
+    food: "/toolkit/food-ordering",
+    "food ordering": "/toolkit/food-ordering",
+    canteen: "/toolkit/food-ordering",
+    marketplace: "/toolkit/marketplace",
+    "market place": "/toolkit/marketplace"
+  };
+
+  const openToolkitPage = (text) => {
+    const match = Object.entries(toolkitPages).find(([phrase]) => text.includes(phrase));
+    if (match) {
+      window.location.href = match[1];
+      announce(`Opening ${match[0]}`);
+      return true;
+    }
+    return false;
+  };
+
+  document.querySelectorAll("[data-scroll]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById(button.dataset.scroll)?.scrollIntoView({ behavior: "smooth" });
+    });
+  });
+
+  document.querySelectorAll("[data-panel]").forEach((button) => {
+    const panelId = button.dataset.panel;
+    button.addEventListener("click", () => {
+      if (panelId === "announcementsPanel") {
+        openAnnouncementWindow();
+        announce("Opening recent announcements");
+        return;
+      }
+      openPanel(panelId);
+    });
+  });
+
+  document.querySelectorAll("[data-close]").forEach((button) => {
+    button.addEventListener("click", () => closePanel(button.dataset.close));
+  });
+
+  document.getElementById("contrastBtn").addEventListener("click", () => {
+    body.classList.toggle("high-contrast");
+    announce(body.classList.contains("high-contrast") ? "High contrast enabled" : "High contrast disabled");
+  });
+
+  let fontScale = 1;
+  document.getElementById("fontUp").addEventListener("click", () => {
+    fontScale = Math.min(1.3, +(fontScale + 0.1).toFixed(1));
+    root.style.setProperty("--font-scale", fontScale);
+  });
+  document.getElementById("fontDown").addEventListener("click", () => {
+    fontScale = Math.max(0.9, +(fontScale - 0.1).toFixed(1));
+    root.style.setProperty("--font-scale", fontScale);
+  });
+
+  document.getElementById("readPageBtn").addEventListener("click", () => {
+    const text = document.querySelector("main").innerText;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      announce("Reading page content");
+    } else {
+      announce("Text to speech is not supported in this browser");
+    }
+  });
+
+  document.getElementById("adminBtn").addEventListener("click", () => {
+    window.location.href = "/admin/login";
+    announce("Opening admin login");
+  });
+
+  async function loadAnnouncements() {
+    const list = document.getElementById("announcementList");
+    try {
+      const response = await fetch("/api/announcements");
+      const announcements = await response.json();
+      list.innerHTML = announcements.map((item) => `
+        <article class="announcement">
+          <h3>${escapeHtml(item.title)}</h3>
+          <p>${escapeHtml(item.body)}</p>
+          <time datetime="${escapeHtml(item.created_at)}">${escapeHtml(item.created_at)}</time>
+          ${item.link ? `<p><a href="${escapeHtml(item.link)}" target="_blank" rel="noopener">Register / open link ↗</a></p>` : ""}
+        </article>
+      `).join("") || "<p>No announcements available.</p>";
+    } catch {
+      list.innerHTML = "<p>Announcements could not be loaded right now.</p>";
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    }[char]));
+  }
+
+  document.querySelectorAll(".announcement-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      openAnnouncementWindow();
+      announce("Opening recent announcements");
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openAnnouncementWindow();
+        announce("Opening recent announcements");
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-tool]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const type = button.dataset.tool;
+      const status = document.getElementById("toolkitStatus");
+      const response = await fetch("/api/request", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ request_type: type, source: "Campus Toolkit" })
+      });
+      const result = await response.json();
+      status.textContent = `${type} request created. Reference #${result.id}. Status: ${result.status}.`;
+      announce(status.textContent);
+    });
+  });
+
+  async function activateSOS() {
+    let location = null;
+    if ("geolocation" in navigator) {
+      try {
+        location = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => resolve({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 5000 }
+          );
+        });
+      } catch { location = null; }
+    }
+
+    const response = await fetch("/api/sos", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ location, source: "Voice/UI SOS" })
+    });
+    const result = await response.json();
+    announce(result.message || "SOS request recorded");
+  }
+
+  document.getElementById("sosBtn").addEventListener("click", activateSOS);
+
+  const normalizeSpeechText = (value = "") => value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const hasAnyPhrase = (text, phrases) => phrases.some((phrase) => text.includes(phrase));
+
+  function runVoiceCommand(command) {
+    const text = normalizeSpeechText(command);
+
+    if (hasAnyPhrase(text, ["close app", "close website", "exit app", "exit website", "goodbye", "bye", "close"])) {
+      voiceStatus.textContent = "Closing AccessEdu AI.";
+      announce("Goodbye. Closing AccessEdu AI.");
+      setTimeout(() => {
+        try {
+          window.close();
+        } catch (error) {
+          window.location.href = "about:blank";
+        }
+      }, 1200);
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["sos", "emergency", "help me", "danger", "accident"])) {
+      activateSOS();
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["access path ai", "accesspath ai", "open access path", "access path", "navigate", "route", "campus map", "find path"])) {
+      window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
+      announce("Opening AccessPath AI");
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["admin", "admin login", "login as admin", "open admin"])) {
+      window.location.href = "/admin/login";
+      announce("Opening admin login");
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["academic bot", "open bot", "academic", "study help", "ask question", "chatbot", "bot"])) {
+      window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
+      announce("Opening Academic Bot");
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["announcement", "announcements", "news", "notice", "latest updates"])) {
+      openAnnouncementWindow();
+      announce("Opening recent announcements");
+      return;
+    }
+
+    if (openToolkitPage(text)) {
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["toolkit", "tools", "campus toolkit"])) {
+      openPanel("toolkitPanel");
+      announce("Opening campus toolkit");
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["welcome", "hello", "hi", "good morning", "good evening"])) {
+      announce("Welcome to AccessEdu AI platform. Tell me what you need.");
+      return;
+    }
+
+    announce("Command not recognized. Say Academic Bot, AccessPath AI, announcements, toolkit, or SOS.");
+  }
+
+  let recognition = null;
+  const startVoice = (autoStart = false) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      voiceStatus.textContent = "Speech recognition is not supported in this browser.";
+      announce(voiceStatus.textContent);
+      return;
+    }
+    if (recognition) {
+      recognition.stop();
+      recognition = null;
+      if (!autoStart) {
+        voiceStatus.textContent = "Voice assistant stopped.";
+      }
+      return;
+    }
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 3;
+    recognition.onstart = () => {
+      voiceStatus.textContent = "Listening… speak a command.";
+      if (!autoStart) {
+        announce("Listening");
+      }
+    };
+    recognition.onresult = (event) => {
+      const transcripts = Array.from(event.results)
+        .map((result) => result[0]?.transcript || "")
+        .filter(Boolean);
+
+      if (!transcripts.length) return;
+
+      const latest = transcripts[transcripts.length - 1].trim();
+      if (!latest) return;
+
+      voiceStatus.textContent = `Heard: ${latest}`;
+
+      const finishedResult = event.results[event.results.length - 1];
+      if (finishedResult && finishedResult.isFinal) {
+        runVoiceCommand(latest);
+      }
+    };
+    recognition.onerror = (event) => {
+      if (event.error !== "no-speech" && event.error !== "aborted") {
+        voiceStatus.textContent = "Voice input ended. Check microphone permission.";
+      }
+    };
+    recognition.onend = () => {
+      recognition = null;
+      if (document.visibilityState === "visible") {
+        startVoice(true);
+      }
+    };
+    recognition.start();
+  };
+
+  document.getElementById("voiceBtn").addEventListener("click", () => startVoice(false));
+  document.getElementById("heroVoiceBtn").addEventListener("click", () => startVoice(false));
+
+  const handleBottomNavAction = (action) => {
+    document.querySelectorAll(".bottom-item").forEach((el) => el.classList.remove("active"));
+    const activeItem = document.querySelector(`.bottom-item[data-action="${action}"]`);
+    if (activeItem) activeItem.classList.add("active");
+
+    if (action === "academic-bot") {
+      window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
+      announce("Opening Academic Bot");
+      return;
+    }
+
+    if (action === "accesspath-ai") {
+      window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
+      announce("Opening AccessPath AI");
+      return;
+    }
+
+    if (action === "sos") {
+      activateSOS();
+      return;
+    }
+
+    if (action === "announcements") {
+      openAnnouncementWindow();
+      announce("Opening recent announcements");
+      return;
+    }
+
+    if (action === "toolkit") {
+      openPanel("toolkitPanel");
+      announce("Opening campus toolkit");
+    }
+  };
+
+  document.querySelectorAll(".bottom-item").forEach((item) => {
+    item.addEventListener("click", () => handleBottomNavAction(item.dataset.action));
+  });
+
+  announce("Welcome to AccessEdu AI platform. Tell me what you need.");
+  voiceStatus.textContent = "Voice assistant ready. Say a command like Academic Bot or SOS.";
+  startVoice(true);
+})();

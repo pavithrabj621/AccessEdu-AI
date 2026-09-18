@@ -1,0 +1,10 @@
+{% extends "toolkit_base.html" %}
+{% block form %}
+<div class="form-grid">
+  <div class="form-field"><label for="studentName">Student name</label><input id="studentName" name="student_name" required autocomplete="name"></div>
+  <div class="form-field"><label for="contact">Contact number</label><input id="contact" name="contact" type="tel" required autocomplete="tel"></div>
+  <div class="form-field"><label for="meal">Meal or item</label><input id="meal" name="meal" required></div>
+  <div class="form-field"><label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" value="1" required></div>
+  <div class="form-field full"><label for="delivery">Delivery location and notes</label><textarea id="delivery" name="delivery_notes" required></textarea></div>
+</div>
+{% endblock %}

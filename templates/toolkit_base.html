@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tool_name }} | AccessEdu AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body data-tool-page="{{ tool_name }}">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark" aria-hidden="true">&#9672;</div><div><strong>AccessEdu AI</strong><span>Paavai Engineering College</span></div></div>
+    <div class="top-actions" aria-label="Accessibility controls">
+      <button class="icon-btn" id="contrastBtn" aria-label="Toggle high contrast mode">Contrast</button>
+      <button class="small-btn" id="fontDown" aria-label="Decrease font size">A-</button>
+      <button class="small-btn" id="fontUp" aria-label="Increase font size">A+</button>
+      <button class="icon-btn" id="readPageBtn" aria-label="Read page aloud">Read</button>
+      <button class="icon-btn primary" id="voiceBtn" aria-label="Activate voice assistant">Voice</button>
+    </div>
+  </header>
+  <main id="main-content" class="section-shell tool-page" tabindex="-1">
+    <div class="tool-layout">
+      <section class="tool-intro" aria-labelledby="toolTitle">
+        <div class="tool-icon-large" aria-hidden="true">{{ tool_icon }}</div>
+        <p class="eyebrow">Campus toolkit</p>
+        <h1 id="toolTitle">{{ tool_name }}</h1>
+        <p>{{ tool_description }}</p>
+        <p class="voice-status" id="voiceStatus" role="status" aria-live="polite">Voice assistant ready. Say help for commands.</p>
+        <nav class="tool-nav" aria-label="Toolkit navigation">
+          <a href="{{ url_for('index') }}">Home</a>
+          <a href="{{ url_for('outpass_tool') }}">Outpass</a>
+          <a href="{{ url_for('exam_booking_tool') }}">Exam booking</a>
+          <a href="{{ url_for('food_ordering_tool') }}">Food ordering</a>
+          <a href="{{ url_for('marketplace_tool') }}">Marketplace</a>
+        </nav>
+      </section>
+      <section class="tool-form-panel" aria-labelledby="formTitle">
+        <h2 id="formTitle">Complete your request</h2>
+        <form id="toolForm" data-request-type="{{ tool_name }}">
+          {% block form %}{% endblock %}
+          <button class="primary-btn" type="submit">Submit {{ tool_name }} request</button>
+        </form>
+        <p class="tool-result" id="toolResult" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer"><span>AccessEdu AI</span><span aria-hidden="true">&#8226;</span><span>Accessible campus services</span></footer>
+  <div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='js/toolkit.js') }}"></script>
+</body>
+</html>
