@@ -269,65 +269,115 @@
   }
 
   let recognition = null;
-  const startVoice = (autoStart = false) => {
+  let voiceEnabled = false;
+  let restartTimer = null;
+  let lastCommand = "";
+  let lastCommandAt = 0;
+
+  const createRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       voiceStatus.textContent = "Speech recognition is not supported in this browser.";
-      announce(voiceStatus.textContent);
-      return;
-    }
-    if (recognition) {
-      recognition.stop();
-      recognition = null;
-      if (!autoStart) {
-        voiceStatus.textContent = "Voice assistant stopped.";
-      }
-      return;
+      return null;
     }
     recognition = new SpeechRecognition();
-    recognition.lang = "en-IN";
+    const languageCodes = {
+      English: "en-IN",
+      "தமிழ்": "ta-IN",
+      "हिन्दी": "hi-IN",
+      "മലയാളം": "ml-IN"
+    };
+    const selectedLanguage = document.getElementById("languageSelect")?.value || "English";
+    recognition.lang = languageCodes[selectedLanguage] || "en-IN";
     recognition.interimResults = true;
     recognition.continuous = true;
-    recognition.maxAlternatives = 3;
+    recognition.maxAlternatives = 5;
     recognition.onstart = () => {
       voiceStatus.textContent = "Listening… speak a command.";
-      if (!autoStart) {
-        announce("Listening");
-      }
+      document.getElementById("voiceBtn")?.setAttribute("aria-pressed", "true");
     };
     recognition.onresult = (event) => {
-      const transcripts = Array.from(event.results)
-        .map((result) => result[0]?.transcript || "")
-        .filter(Boolean);
-
-      if (!transcripts.length) return;
-
-      const latest = transcripts[transcripts.length - 1].trim();
-      if (!latest) return;
-
-      voiceStatus.textContent = `Heard: ${latest}`;
-
-      const finishedResult = event.results[event.results.length - 1];
-      if (finishedResult && finishedResult.isFinal) {
-        runVoiceCommand(latest);
+      let interimTranscript = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const speechResult = event.results[index];
+        const transcript = speechResult[0]?.transcript?.trim() || "";
+        if (!transcript) continue;
+        if (speechResult.isFinal) {
+          const now = Date.now();
+          const normalized = normalizeSpeechText(transcript);
+          if (normalized && (normalized !== lastCommand || now - lastCommandAt > 1500)) {
+            lastCommand = normalized;
+            lastCommandAt = now;
+            runVoiceCommand(transcript);
+          }
+        } else {
+          interimTranscript += `${transcript} `;
+        }
       }
+      const heard = interimTranscript.trim();
+      if (heard) voiceStatus.textContent = `Listening: ${heard}`;
     };
     recognition.onerror = (event) => {
-      if (event.error !== "no-speech" && event.error !== "aborted") {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        voiceEnabled = false;
         voiceStatus.textContent = "Voice input ended. Check microphone permission.";
       }
     };
     recognition.onend = () => {
       recognition = null;
-      if (document.visibilityState === "visible") {
-        startVoice(true);
+      if (voiceEnabled && document.visibilityState === "visible") {
+        clearTimeout(restartTimer);
+        restartTimer = setTimeout(() => startVoice(true), 250);
+      } else {
+        document.getElementById("voiceBtn")?.setAttribute("aria-pressed", "false");
       }
     };
-    recognition.start();
+    return recognition;
   };
 
-  document.getElementById("voiceBtn").addEventListener("click", () => startVoice(false));
-  document.getElementById("heroVoiceBtn").addEventListener("click", () => startVoice(false));
+  const startVoice = (autoStart = false) => {
+    if (recognition) return;
+    voiceEnabled = true;
+    const activeRecognition = createRecognition();
+    if (!activeRecognition) {
+      voiceEnabled = false;
+      announce(voiceStatus.textContent);
+      return;
+    }
+    try {
+      activeRecognition.start();
+      if (!autoStart) announce("Voice assistant enabled. I am listening continuously.");
+    } catch {
+      voiceStatus.textContent = "Voice assistant could not start. Check microphone permission.";
+      document.getElementById("voiceBtn")?.setAttribute("aria-pressed", "false");
+    }
+  };
+
+  const stopVoice = () => {
+    voiceEnabled = false;
+    clearTimeout(restartTimer);
+    if (recognition) {
+      recognition.stop();
+      recognition = null;
+    }
+    voiceStatus.textContent = "Voice assistant paused. Select the microphone to resume.";
+    document.getElementById("voiceBtn")?.setAttribute("aria-pressed", "false");
+    announce("Voice assistant paused");
+  };
+
+  const toggleVoice = () => {
+    if (voiceEnabled) stopVoice();
+    else startVoice(false);
+  };
+
+  document.getElementById("voiceBtn").addEventListener("click", toggleVoice);
+  document.getElementById("heroVoiceBtn").addEventListener("click", toggleVoice);
+  document.getElementById("languageSelect")?.addEventListener("change", () => {
+    if (voiceEnabled) {
+      stopVoice();
+      startVoice(true);
+    }
+  });
 
   const handleBottomNavAction = (action) => {
     document.querySelectorAll(".bottom-item").forEach((el) => el.classList.remove("active"));
