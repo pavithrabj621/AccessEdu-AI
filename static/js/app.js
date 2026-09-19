@@ -119,7 +119,6 @@
     if (match) {
       stopVoiceSession();
       openFeatureTab(match[1]);
-      announce(`Opening ${match[0]}`);
       return true;
     }
     return false;
@@ -136,7 +135,6 @@
     button.addEventListener("click", () => {
       if (panelId === "announcementsPanel") {
         openAnnouncementWindow();
-        announce("Opening recent announcements");
         return;
       }
       openPanel(panelId);
@@ -205,13 +203,11 @@
   document.querySelectorAll(".announcement-card").forEach((card) => {
     card.addEventListener("click", () => {
       openAnnouncementWindow();
-      announce("Opening recent announcements");
     });
     card.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         openAnnouncementWindow();
-        announce("Opening recent announcements");
       }
     });
   });
@@ -373,13 +369,16 @@
     if (feature.id === "accesspath") {
       stopVoiceSession();
       openFeatureTab(window.APP_CONFIG.accesspathUrl);
+      return;
     } else if (feature.id === "academic-bot") {
       stopVoiceSession();
       openFeatureTab(window.APP_CONFIG.academicBotUrl);
+      return;
     } else if (feature.id === "sos") {
       activateSOS();
     } else if (feature.id === "announcements") {
       openAnnouncementWindow();
+      return;
     } else if (feature.id === "campus-toolkit") {
       stopVoiceSession();
       toolkitChoicePending = true;
@@ -443,7 +442,6 @@
     if (hasAnyPhrase(text, ["access path ai", "accesspath ai", "open access path", "access path", "accesspath", "navigate", "route", "campus map", "find path"])) {
       stopVoiceSession();
       window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
-      announce("Opening AccessPath AI");
       return;
     }
 
@@ -457,13 +455,11 @@
     if (hasAnyPhrase(text, ["academic bot", "open bot", "academic", "study help", "ask question", "chatbot", "bot"])) {
       stopVoiceSession();
       window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
-      announce("Opening Academic Bot");
       return;
     }
 
     if (hasAnyPhrase(text, ["announcement", "announcements", "news", "notice", "latest updates"])) {
       openAnnouncementWindow();
-      announce("Opening recent announcements");
       return;
     }
 
@@ -612,14 +608,12 @@
     if (action === "academic-bot") {
       stopVoiceSession();
       window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
-      announce("Opening Academic Bot");
       return;
     }
 
     if (action === "accesspath-ai") {
       stopVoiceSession();
       window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
-      announce("Opening AccessPath AI");
       return;
     }
 
@@ -630,7 +624,6 @@
 
     if (action === "announcements") {
       openAnnouncementWindow();
-      announce("Opening recent announcements");
       return;
     }
 

@@ -4,6 +4,24 @@
   let recognition = null;
   let listening = true;
 
+  const stopVoice = () => {
+    listening = false;
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognition = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  window.addEventListener("pagehide", stopVoice);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      stopVoice();
+      status.textContent = "Voice paused while this tab is hidden.";
+    }
+  });
+
   const speak = (message, done) => {
     live.textContent = message;
     if (!("speechSynthesis" in window)) { done?.(); return; }
