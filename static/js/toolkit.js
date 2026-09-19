@@ -106,9 +106,10 @@
     try {
       const response = await fetch("/api/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_type: form.dataset.requestType, source: "Campus Toolkit Voice", completion_mode: "voice", ...data }) });
       const saved = await response.json();
+      if (!response.ok || !saved.ok) throw new Error("Request was not accepted");
       state = "done";
-      result.textContent = `${form.dataset.requestType} submitted. Reference #${saved.id}.`;
-      announce(`Submitted. Reference number ${saved.id}.`);
+      result.textContent = `Application submitted. Reference #${saved.id}.`;
+      announce(`Application submitted. Reference number ${saved.id}.`);
     } catch {
       state = "review";
       result.textContent = "Submission failed. Say submit again.";
@@ -123,7 +124,7 @@
       return;
     }
     if (/\bhelp\b|what can i say|commands/.test(normalize(transcript))) {
-      announce("Say yes to answer questions, review it with me, or stop.");
+      announce("Say review it with me, then say submit, or say stop.");
       return;
     }
     if (/\bstop\b|stop speaking|stop listening|be quiet/.test(normalize(transcript))) {
@@ -167,7 +168,7 @@
       return;
     }
     if (state === "review") {
-      if (isYes(transcript)) submitForm();
+      if (/\bsubmit\b|send application|submit application/.test(normalize(transcript)) || isYes(transcript)) submitForm();
       else announce("Please say yes to submit or no to stop.");
     }
   };
