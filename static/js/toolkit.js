@@ -117,6 +117,11 @@
   };
 
   const handleAnswer = (transcript) => {
+    if (/\bgo home\b|open home|home page|main page|return home|back home/.test(normalize(transcript))) {
+      stopVoiceSession();
+      window.location.href = "/";
+      return;
+    }
     if (/\bhelp\b|what can i say|commands/.test(normalize(transcript))) {
       announce("Say yes to answer questions, review it with me, or stop.");
       return;

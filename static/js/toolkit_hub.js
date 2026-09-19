@@ -72,6 +72,11 @@
     recognition.onstart = () => { status.textContent = "Listening for a toolkit feature..."; };
     recognition.onresult = (event) => {
       const transcript = event.results[event.results.length - 1]?.[0]?.transcript || "";
+      if (/\bgo home\b|open home|home page|main page|return home|back home/.test(normalize(transcript))) {
+        stopVoice();
+        window.location.href = "/";
+        return;
+      }
       if (/\bhelp\b|what can i say|commands/.test(normalize(transcript))) {
         recognition.stop();
         speak("Say digital outpass, exam booking, food ordering, or marketplace.", listen);

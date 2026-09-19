@@ -396,6 +396,12 @@
       return;
     }
 
+    if (hasAnyPhrase(text, ["go home", "open home", "home page", "main page", "return home", "back home"])) {
+      stopVoiceSession();
+      window.location.href = "/";
+      return;
+    }
+
     if (hasAnyPhrase(text, ["help", "voice help", "what can i say", "commands"])) {
       announce("Say AccessPath, Academic Bot, SOS, announcements, or campus toolkit.");
       return;
