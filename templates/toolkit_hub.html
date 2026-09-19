@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campus Toolkit | AccessEdu AI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <main class="section-shell tool-page" tabindex="-1">
+    <p class="eyebrow">Campus services</p>
+    <h1>Campus Toolkit</h1>
+    <p class="hero-text">Choose a campus service.</p>
+    <div class="toolkit-grid">
+      <a class="tool-item" href="{{ url_for('outpass_tool') }}"><span aria-hidden="true">🚪</span><span>Outpass</span></a>
+      <a class="tool-item" href="{{ url_for('exam_booking_tool') }}"><span aria-hidden="true">🗓</span><span>Exam booking</span></a>
+      <a class="tool-item" href="{{ url_for('food_ordering_tool') }}"><span aria-hidden="true">🍱</span><span>Food ordering</span></a>
+      <a class="tool-item" href="{{ url_for('marketplace_tool') }}"><span aria-hidden="true">📚</span><span>Marketplace</span></a>
+    </div>
+  </main>
+</body>
+</html>

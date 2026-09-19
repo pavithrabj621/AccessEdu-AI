@@ -81,16 +81,15 @@
   const openAnnouncementWindow = () => {
     stopVoiceSession();
     const url = window.APP_CONFIG?.announcementsUrl || "https://niviks20.github.io/announcement/";
-    if (window.__accesseduAnnouncementsTab && !window.__accesseduAnnouncementsTab.closed) {
-      window.__accesseduAnnouncementsTab.location.href = url;
-      window.__accesseduAnnouncementsTab.focus();
-      return;
-    }
-
-    window.__accesseduAnnouncementsTab = window.open(url, "accesseduAnnouncements");
-    if (!window.__accesseduAnnouncementsTab) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
       window.location.href = url;
     }
+  };
+
+  const openFeatureTab = (url) => {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.href = url;
   };
 
   const openPanel = (id) => {
@@ -122,7 +121,7 @@
     const match = Object.entries(toolkitPages).find(([phrase]) => text.includes(phrase));
     if (match) {
       stopVoiceSession();
-      window.location.href = match[1];
+      openFeatureTab(match[1]);
       announce(`Opening ${match[0]}`);
       return true;
     }
@@ -351,18 +350,18 @@
   const openFeature = (feature) => {
     if (feature.id === "accesspath") {
       stopVoiceSession();
-      window.location.href = window.APP_CONFIG.accesspathUrl;
+      openFeatureTab(window.APP_CONFIG.accesspathUrl);
     } else if (feature.id === "academic-bot") {
       stopVoiceSession();
-      window.location.href = window.APP_CONFIG.academicBotUrl;
+      openFeatureTab(window.APP_CONFIG.academicBotUrl);
     } else if (feature.id === "sos") {
       activateSOS();
     } else if (feature.id === "announcements") {
-      stopVoiceSession();
-      window.location.href = window.APP_CONFIG.announcementsUrl;
+      openAnnouncementWindow();
     } else if (feature.id === "campus-toolkit") {
+      stopVoiceSession();
       toolkitChoicePending = true;
-      announce("What feature would you like to use?");
+      openFeatureTab("/toolkit");
       return;
     }
     announce(`Opening ${feature.label}.`);
@@ -607,8 +606,8 @@
     }
 
     if (action === "toolkit") {
-      openPanel("toolkitPanel");
-      announce("Opening campus toolkit");
+      stopVoiceSession();
+      openFeatureTab("/toolkit");
     }
   };
 

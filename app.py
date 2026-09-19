@@ -172,6 +172,11 @@ def outpass_tool():
     )
 
 
+@app.get("/toolkit")
+def toolkit_hub():
+    return render_template("toolkit_hub.html")
+
+
 @app.get("/toolkit/exam-booking")
 def exam_booking_tool():
     return render_template(

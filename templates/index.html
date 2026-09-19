@@ -128,10 +128,10 @@
           <button class="small-btn" data-close="toolkitPanel" aria-label="Close toolkit">×</button>
         </div>
         <div class="toolkit-grid">
-          <a class="tool-item" href="{{ url_for('outpass_tool') }}">🚪 <span>Outpass</span></a>
-          <a class="tool-item" href="{{ url_for('exam_booking_tool') }}">🗓 <span>Exam booking</span></a>
-          <a class="tool-item" href="{{ url_for('food_ordering_tool') }}">🍱 <span>Food ordering</span></a>
-          <a class="tool-item" href="{{ url_for('marketplace_tool') }}">📚 <span>Marketplace</span></a>
+          <a class="tool-item" href="{{ url_for('outpass_tool') }}" target="_blank" rel="noopener noreferrer">🚪 <span>Outpass</span></a>
+          <a class="tool-item" href="{{ url_for('exam_booking_tool') }}" target="_blank" rel="noopener noreferrer">🗓 <span>Exam booking</span></a>
+          <a class="tool-item" href="{{ url_for('food_ordering_tool') }}" target="_blank" rel="noopener noreferrer">🍱 <span>Food ordering</span></a>
+          <a class="tool-item" href="{{ url_for('marketplace_tool') }}" target="_blank" rel="noopener noreferrer">📚 <span>Marketplace</span></a>
         </div>
         <p class="panel-help" id="toolkitStatus" role="status">Choose a service to open its dedicated page.</p>
       </div>
@@ -179,6 +179,6 @@
     };
   </script>
   <script src="{{ url_for('static', filename='js/server_voice.js', v='9') }}"></script>
-  <script src="{{ url_for('static', filename='js/app.js', v='9') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='10') }}"></script>
 </body>
 </html>
