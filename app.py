@@ -14,11 +14,11 @@ DATABASE = os.path.join(os.path.dirname(__file__), "aeaccessedu.db")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 ADMIN_ROLE = os.getenv("ADMIN_ROLE", "administrator")
-VOICE_ENGINE = os.getenv("VOICE_ENGINE", "whisper").lower()
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "large-v3").strip()
+VOICE_ENGINE = os.getenv("VOICE_ENGINE", "browser").lower()
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small").strip()
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu").strip()
 WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip()
-VOICE_MAX_SECONDS = max(10, min(60, int(os.getenv("VOICE_MAX_SECONDS", "15"))))
+VOICE_MAX_SECONDS = max(10, min(60, int(os.getenv("VOICE_MAX_SECONDS", "10"))))
 VOICE_MIN_CONFIDENCE = float(os.getenv("VOICE_MIN_CONFIDENCE", "0.45"))
 TTS_RATE = max(0.5, min(1.5, float(os.getenv("TTS_RATE", "0.95"))))
 TTS_PITCH = max(0.5, min(2.0, float(os.getenv("TTS_PITCH", "1.0"))))
@@ -433,7 +433,7 @@ def transcribe_audio():
         model = get_whisper_model()
         segments, info = model.transcribe(
             temp_path,
-            beam_size=5,
+            beam_size=1,
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 700},
             condition_on_previous_text=False,

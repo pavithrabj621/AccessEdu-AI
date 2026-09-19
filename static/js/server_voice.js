@@ -12,6 +12,8 @@
       this.analyser = null;
       this.raf = null;
       this.startedAt = 0;
+      this.abortController = null;
+      this.cancelled = false;
     }
 
     async start() {
@@ -21,6 +23,7 @@
         return;
       }
       try {
+        this.cancelled = false;
         this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type)) || "";
         this.recorder = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined);
@@ -29,7 +32,7 @@
         this.recorder.onstop = () => this.finish();
         this.recorder.start(250);
         this.startedAt = Date.now();
-        this.onStatus("Listening for up to 15 seconds...");
+        this.onStatus(`Listening for up to ${this.maxSeconds} seconds...`);
         this.startVad();
       } catch (error) {
         this.cleanup();
@@ -54,7 +57,7 @@
           for (const value of data) energy += Math.abs(value - 128);
           const averageEnergy = energy / data.length;
           if (averageEnergy > 4) { speechSeen = true; quietSince = Date.now(); }
-          if (speechSeen && Date.now() - quietSince > 2500) this.stop();
+          if (speechSeen && Date.now() - quietSince > 2200) this.stop();
           if (Date.now() - this.startedAt >= this.maxSeconds * 1000) this.stop();
           this.raf = requestAnimationFrame(monitor);
         };
@@ -69,17 +72,20 @@
     }
 
     async finish() {
+      if (this.cancelled) return;
       const blob = new Blob(this.chunks, { type: this.recorder?.mimeType || "audio/webm" });
       const extension = blob.type.includes("mp4") ? "m4a" : "webm";
-      this.onStatus("Analyzing speech...");
+      this.onStatus("Analyzing with Whisper...");
       const formData = new FormData();
       formData.append("audio", blob, `voice.${extension}`);
+      this.abortController = new AbortController();
       try {
-        const response = await fetch("/api/transcribe", { method: "POST", body: formData });
+        const response = await fetch("/api/transcribe", { method: "POST", body: formData, signal: this.abortController.signal });
         const result = await response.json();
         if (result.ok && result.transcript) this.onTranscript(result.transcript, result.confidence);
         else this.onError(result.reason || "transcription-error", result.message || "Speech could not be recognized. Try again or type your answer.");
-      } catch {
+      } catch (error) {
+        if (error.name === "AbortError" || this.cancelled) return;
         this.onError("network-error", "The speech service could not be reached. Use the typed form instead.");
       } finally {
         this.cleanup();
@@ -94,8 +100,64 @@
       this.recorder = null;
       this.audioContext = null;
       this.analyser = null;
+      this.abortController = null;
+    }
+
+    cancel() {
+      this.cancelled = true;
+      this.abortController?.abort();
+      if (this.recorder && this.recorder.state !== "inactive") {
+        this.recorder.onstop = null;
+        this.recorder.stop();
+      }
+      this.cleanup();
     }
   }
 
   window.ServerVoiceRecorder = ServerVoiceRecorder;
+
+  class StopListener {
+    constructor(onStop) {
+      this.onStop = onStop;
+      this.recognition = null;
+      this.enabled = false;
+    }
+
+    start() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition || this.enabled) return;
+      this.enabled = true;
+      this.recognition = new SpeechRecognition();
+      this.recognition.lang = "en-IN";
+      this.recognition.continuous = true;
+      this.recognition.interimResults = false;
+      this.recognition.onresult = (event) => {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const text = event.results[index][0]?.transcript?.toLowerCase() || "";
+          if (/\bstop\b|stop speaking|stop listening|be quiet/.test(text)) {
+            this.onStop();
+            return;
+          }
+        }
+      };
+      this.recognition.onend = () => {
+        this.recognition = null;
+        if (this.enabled) {
+          try { this.start(); } catch { /* Browser may reject rapid restarts. */ }
+        }
+      };
+      try { this.recognition.start(); } catch { this.recognition = null; }
+    }
+
+    stop() {
+      this.enabled = false;
+      if (this.recognition) {
+        this.recognition.onend = null;
+        this.recognition.stop();
+        this.recognition = null;
+      }
+    }
+  }
+
+  window.StopListener = StopListener;
 })();

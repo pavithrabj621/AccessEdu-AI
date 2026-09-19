@@ -11,6 +11,8 @@
   let restartTimer = null;
   let serverAsrFailed = false;
   let serverRecorder = null;
+  let serverRetryCount = 0;
+  let interruptListener = null;
   let state = "consent";
   let questionIndex = 0;
   let pendingAnswer = "";
@@ -23,9 +25,22 @@
       recognition.stop();
       recognition = null;
     }
-    serverRecorder?.stop();
+    serverRecorder?.cancel();
     serverRecorder = null;
+    interruptListener?.stop();
+    interruptListener = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  const interruptCurrentTurn = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    serverRecorder?.cancel();
+    serverRecorder = null;
+    recognition?.stop();
+    recognition = null;
+    voiceEnabled = true;
+    voiceStatus.textContent = "Stopped. Listening...";
+    announce("Okay.", startRecognition);
   };
 
   window.addEventListener("pagehide", stopVoiceSession);
@@ -102,6 +117,10 @@
   };
 
   const handleAnswer = (transcript) => {
+    if (/\bstop\b|stop speaking|stop listening|be quiet/.test(normalize(transcript))) {
+      interruptCurrentTurn();
+      return;
+    }
     if (state === "consent") {
       if (isYes(transcript)) { questionIndex = 0; askCurrentQuestion(); }
       else if (isNo(transcript)) { state = "manual"; announce("Okay. You can complete the form manually."); }
@@ -137,12 +156,17 @@
   };
   const startRecognition = () => {
     if (!voiceEnabled || recognition) return;
+    if (body.dataset.voiceEngine === "whisper" && !interruptListener && window.StopListener) {
+      interruptListener = new StopListener(interruptCurrentTurn);
+      interruptListener.start();
+    }
     if (body.dataset.voiceEngine === "whisper" && !serverAsrFailed && window.ServerVoiceRecorder) {
       serverRecorder = new ServerVoiceRecorder({
         maxSeconds: Number(body.dataset.voiceMaxSeconds || 15),
         onStatus: (message) => { voiceStatus.textContent = message; },
         onTranscript: (transcript) => {
           serverRecorder = null;
+          serverRetryCount = 0;
           if (voiceEnabled && document.visibilityState === "visible") {
             voiceStatus.textContent = "Processing answer...";
             handleAnswer(transcript);
@@ -153,6 +177,16 @@
           if (["model-unavailable", "server-asr-disabled", "browser-audio-unavailable"].includes(reason)) {
             serverAsrFailed = true;
             announce("Switching to browser voice input.", startRecognition);
+            return;
+          }
+          if (["no-speech", "model-uncertainty", "transcription-error", "network-error"].includes(reason) && serverRetryCount < 2) {
+            serverRetryCount += 1;
+            announce("Please try again.", startRecognition);
+            return;
+          }
+          if (["no-speech", "model-uncertainty", "transcription-error", "network-error"].includes(reason)) {
+            serverAsrFailed = true;
+            announce("Whisper could not hear that. Switching to browser voice input.", startRecognition);
             return;
           }
           voiceStatus.textContent = message;

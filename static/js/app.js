@@ -9,6 +9,8 @@
   let restartTimer = null;
   let serverRecorder = null;
   let serverAsrFailed = false;
+  let serverRetryCount = 0;
+  let interruptListener = null;
 
   const stopVoiceSession = () => {
     voiceEnabled = false;
@@ -18,9 +20,22 @@
       recognition.stop();
       recognition = null;
     }
-    serverRecorder?.stop();
+    serverRecorder?.cancel();
     serverRecorder = null;
+    interruptListener?.stop();
+    interruptListener = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  const interruptCurrentTurn = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    serverRecorder?.cancel();
+    serverRecorder = null;
+    recognition?.stop();
+    recognition = null;
+    voiceEnabled = true;
+    voiceStatus.textContent = "Stopped. Listening...";
+    announce("Okay.", () => startVoice(true));
   };
 
   window.addEventListener("pagehide", stopVoiceSession);
@@ -256,8 +271,120 @@
 
   const hasAnyPhrase = (text, phrases) => phrases.some((phrase) => text.includes(phrase));
 
+  const featureIntents = [
+    {
+      id: "accesspath",
+      label: "AccessPath AI",
+      aliases: ["accesspath", "access path", "access path ai", "campus path", "campus map", "navigation", "navigate"]
+    },
+    {
+      id: "academic-bot",
+      label: "Academic Bot",
+      aliases: ["academic bot", "academic", "study bot", "study help", "course bot", "chatbot"]
+    },
+    {
+      id: "sos",
+      label: "SOS",
+      aliases: ["sos", "emergency", "urgent help", "danger", "accident", "help me"]
+    },
+    {
+      id: "announcements",
+      label: "Announcements",
+      aliases: ["announcements", "announcement", "announcment", "annoubncements", "annuncemnt", "news", "notices", "updates"]
+    },
+    {
+      id: "campus-toolkit",
+      label: "Campus Toolkit",
+      aliases: ["campus toolkit", "campus tools", "toolkit", "tools", "student services", "campus services", "malkr"]
+    }
+  ];
+
+  const editDistance = (left, right) => {
+    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+      const current = [leftIndex];
+      for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+        current[rightIndex] = Math.min(
+          current[rightIndex - 1] + 1,
+          previous[rightIndex] + 1,
+          previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+        );
+      }
+      previous.splice(0, previous.length, ...current);
+    }
+    return previous[right.length];
+  };
+
+  const wordSimilarity = (spokenWord, aliasWord) => {
+    if (spokenWord === aliasWord) return 1;
+    if (spokenWord.length >= 4 && (spokenWord.startsWith(aliasWord) || aliasWord.startsWith(spokenWord))) return 0.9;
+    const distance = editDistance(spokenWord, aliasWord);
+    return 1 - distance / Math.max(spokenWord.length, aliasWord.length, 1);
+  };
+
+  const scoreAlias = (words, alias) => {
+    const aliasWords = normalizeSpeechText(alias).split(" ").filter(Boolean);
+    const matches = aliasWords.map((aliasWord) => Math.max(...words.map((word) => wordSimilarity(word, aliasWord)), 0));
+    const matchedWords = matches.filter((score) => score >= 0.62).length;
+    if (matchedWords !== aliasWords.length) return 0;
+    const average = matches.reduce((sum, score) => sum + score, 0) / matches.length;
+    const phraseBonus = normalizeSpeechText(words.join(" ")).includes(aliasWords.join(" ")) ? 0.12 : 0;
+    return Math.min(1, average + phraseBonus);
+  };
+
+  const parseFeatureIntent = (command) => {
+    const words = normalizeSpeechText(command).split(" ").filter(Boolean);
+    if (!words.length) return { type: "none" };
+    const ranked = featureIntents.map((feature) => ({
+      ...feature,
+      score: Math.max(...feature.aliases.map((alias) => scoreAlias(words, alias)), 0)
+    })).sort((left, right) => right.score - left.score);
+    const best = ranked[0];
+    const second = ranked[1];
+    if (!best || best.score < 0.62) return { type: "none" };
+    if (second && second.score >= 0.62 && best.score - second.score < 0.08) {
+      return { type: "ambiguous", options: [best.label, second.label] };
+    }
+    return { type: "match", feature: best };
+  };
+
+  const openFeature = (feature) => {
+    if (feature.id === "accesspath") {
+      stopVoiceSession();
+      window.location.href = window.APP_CONFIG.accesspathUrl;
+    } else if (feature.id === "academic-bot") {
+      stopVoiceSession();
+      window.location.href = window.APP_CONFIG.academicBotUrl;
+    } else if (feature.id === "sos") {
+      activateSOS();
+    } else if (feature.id === "announcements") {
+      stopVoiceSession();
+      window.location.href = window.APP_CONFIG.announcementsUrl;
+    } else if (feature.id === "campus-toolkit") {
+      toolkitChoicePending = true;
+      announce("What feature would you like to use?");
+      return;
+    }
+    announce(`Opening ${feature.label}.`);
+  };
+
   function runVoiceCommand(command) {
     const text = normalizeSpeechText(command);
+
+    if (hasAnyPhrase(text, ["stop", "stop speaking", "stop listening", "be quiet"])) {
+      interruptCurrentTurn();
+      return;
+    }
+
+    const intent = parseFeatureIntent(command);
+    if (intent.type === "ambiguous") {
+      announce(`Did you mean ${intent.options[0]} or ${intent.options[1]}?`);
+      return;
+    }
+    if (intent.type === "match") {
+      openFeature(intent.feature);
+      return;
+    }
 
     if (hasAnyPhrase(text, ["close app", "close website", "exit app", "exit website", "goodbye", "bye", "close"])) {
       stopVoiceSession();
@@ -329,7 +456,7 @@
       return;
     }
 
-    announce("Command not recognized. Say Academic Bot, AccessPath AI, announcements, toolkit, or SOS.");
+    announce("I could not identify a feature. Say AccessPath, Academic Bot, SOS, announcements, or campus toolkit.");
   }
 
   let lastCommand = "";
@@ -391,7 +518,11 @@
     recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         voiceEnabled = false;
-        voiceStatus.textContent = "Voice input ended. Check microphone permission.";
+        voiceStatus.textContent = "Allow microphone access, then press the microphone button.";
+      } else if (event.error === "audio-capture") {
+        voiceStatus.textContent = "No microphone was found.";
+      } else if (event.error === "network") {
+        voiceStatus.textContent = "Browser speech service is unavailable.";
       }
     };
     recognition.onend = () => {
@@ -409,31 +540,6 @@
   const startVoice = (autoStart = false) => {
     if (recognition) return;
     voiceEnabled = true;
-    if (window.APP_CONFIG?.voiceEngine === "whisper" && !serverAsrFailed && window.ServerVoiceRecorder) {
-      serverRecorder = new ServerVoiceRecorder({
-        maxSeconds: window.APP_CONFIG.voiceMaxSeconds || 15,
-        onStatus: (message) => { voiceStatus.textContent = message; },
-        onTranscript: (transcript) => {
-          serverRecorder = null;
-          voiceStatus.textContent = "Processing command...";
-          if (voiceEnabled && document.visibilityState === "visible") runVoiceCommand(transcript);
-        },
-        onError: (reason, message) => {
-          serverRecorder = null;
-          if (["model-unavailable", "server-asr-disabled", "browser-audio-unavailable"].includes(reason)) {
-            serverAsrFailed = true;
-            voiceStatus.textContent = "Server speech model unavailable. Switching to browser voice input.";
-            announce("Switching to browser voice input.", () => startVoice(true));
-            return;
-          }
-          voiceStatus.textContent = message;
-          logVoiceEvent("", 0, reason);
-          if (voiceEnabled && document.visibilityState === "visible") announce(message);
-        }
-      });
-      serverRecorder.start();
-      return;
-    }
     const activeRecognition = createRecognition();
     if (!activeRecognition) {
       voiceEnabled = false;
