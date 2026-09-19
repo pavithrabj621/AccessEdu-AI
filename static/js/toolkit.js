@@ -9,6 +9,8 @@
   let recognition = null;
   let voiceEnabled = false;
   let restartTimer = null;
+  let serverAsrFailed = false;
+  let serverRecorder = null;
   let state = "consent";
   let questionIndex = 0;
   let pendingAnswer = "";
@@ -21,6 +23,8 @@
       recognition.stop();
       recognition = null;
     }
+    serverRecorder?.stop();
+    serverRecorder = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   };
 
@@ -49,7 +53,8 @@
     }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(message);
-    utterance.rate = 0.9;
+    utterance.rate = Number(body.dataset.ttsRate || 0.9);
+    utterance.pitch = Number(body.dataset.ttsPitch || 1);
     utterance.onend = () => {
       onDone?.();
       if (voiceEnabled && !recognition) startRecognition();
@@ -112,7 +117,7 @@
       }
       field.value = pendingAnswer;
       state = "confirm-answer";
-      announce(`I heard ${pendingAnswer}. Is that correct?`);
+      announce("Answer received. Is that correct?");
       return;
     }
     if (state === "confirm-answer") {
@@ -132,6 +137,32 @@
   };
   const startRecognition = () => {
     if (!voiceEnabled || recognition) return;
+    if (body.dataset.voiceEngine === "whisper" && !serverAsrFailed && window.ServerVoiceRecorder) {
+      serverRecorder = new ServerVoiceRecorder({
+        maxSeconds: Number(body.dataset.voiceMaxSeconds || 15),
+        onStatus: (message) => { voiceStatus.textContent = message; },
+        onTranscript: (transcript) => {
+          serverRecorder = null;
+          if (voiceEnabled && document.visibilityState === "visible") {
+            voiceStatus.textContent = "Processing answer...";
+            handleAnswer(transcript);
+          }
+        },
+        onError: (reason, message) => {
+          serverRecorder = null;
+          if (["model-unavailable", "server-asr-disabled", "browser-audio-unavailable"].includes(reason)) {
+            serverAsrFailed = true;
+            announce("Switching to browser voice input.", startRecognition);
+            return;
+          }
+          voiceStatus.textContent = message;
+          logVoiceEvent("", 0, reason);
+          if (voiceEnabled && document.visibilityState === "visible") announce(message);
+        }
+      });
+      serverRecorder.start();
+      return;
+    }
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { voiceStatus.textContent = "Speech recognition is unavailable. Use the visible form."; return; }
     recognition = new SpeechRecognition();
@@ -146,13 +177,13 @@
         const item = event.results[index];
         const transcript = item[0]?.transcript?.trim() || "";
         if (!transcript) continue;
-        if (!item.isFinal) { interim += `${transcript} `; continue; }
+        if (!item.isFinal) { interim = ""; continue; }
         const confidence = item[0]?.confidence ?? 1;
         logVoiceEvent(transcript, confidence, confidence < 0.45 ? "low-confidence" : "recognized");
-        voiceStatus.textContent = `Heard: ${transcript}`;
+        voiceStatus.textContent = "Processing answer...";
         handleAnswer(transcript);
       }
-      if (interim.trim()) voiceStatus.textContent = `Listening: ${interim.trim()}`;
+      voiceStatus.textContent = "Listening...";
     };
     recognition.onerror = () => { voiceStatus.textContent = "Listening paused. Check microphone permission."; };
     recognition.onend = () => { recognition = null; if (voiceEnabled) restartTimer = setTimeout(startRecognition, 250); };

@@ -7,6 +7,8 @@
   let recognition = null;
   let voiceEnabled = false;
   let restartTimer = null;
+  let serverRecorder = null;
+  let serverAsrFailed = false;
 
   const stopVoiceSession = () => {
     voiceEnabled = false;
@@ -16,6 +18,8 @@
       recognition.stop();
       recognition = null;
     }
+    serverRecorder?.stop();
+    serverRecorder = null;
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   };
 
@@ -46,7 +50,8 @@
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(message);
-      utterance.rate = 0.95;
+      utterance.rate = window.APP_CONFIG?.ttsRate || 0.95;
+      utterance.pitch = window.APP_CONFIG?.ttsPitch || 1;
       utterance.onend = () => {
         onDone?.();
         if (!onDone && voiceEnabled && !recognition) startVoice(true);
@@ -378,11 +383,10 @@
             runVoiceCommand(transcript);
           }
         } else {
-          interimTranscript += `${transcript} `;
+          interimTranscript = "";
         }
       }
-      const heard = interimTranscript.trim();
-      if (heard) voiceStatus.textContent = `Listening: ${heard}`;
+      voiceStatus.textContent = "Listening...";
     };
     recognition.onerror = (event) => {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
@@ -405,6 +409,31 @@
   const startVoice = (autoStart = false) => {
     if (recognition) return;
     voiceEnabled = true;
+    if (window.APP_CONFIG?.voiceEngine === "whisper" && !serverAsrFailed && window.ServerVoiceRecorder) {
+      serverRecorder = new ServerVoiceRecorder({
+        maxSeconds: window.APP_CONFIG.voiceMaxSeconds || 15,
+        onStatus: (message) => { voiceStatus.textContent = message; },
+        onTranscript: (transcript) => {
+          serverRecorder = null;
+          voiceStatus.textContent = "Processing command...";
+          if (voiceEnabled && document.visibilityState === "visible") runVoiceCommand(transcript);
+        },
+        onError: (reason, message) => {
+          serverRecorder = null;
+          if (["model-unavailable", "server-asr-disabled", "browser-audio-unavailable"].includes(reason)) {
+            serverAsrFailed = true;
+            voiceStatus.textContent = "Server speech model unavailable. Switching to browser voice input.";
+            announce("Switching to browser voice input.", () => startVoice(true));
+            return;
+          }
+          voiceStatus.textContent = message;
+          logVoiceEvent("", 0, reason);
+          if (voiceEnabled && document.visibilityState === "visible") announce(message);
+        }
+      });
+      serverRecorder.start();
+      return;
+    }
     const activeRecognition = createRecognition();
     if (!activeRecognition) {
       voiceEnabled = false;

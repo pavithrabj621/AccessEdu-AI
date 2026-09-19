@@ -53,6 +53,26 @@ Toolkit pages ask permission before collecting answers. A voice answer is shown 
 
 Toolkit submissions are stored as structured JSON in the local SQLite database (`aeaccessedu.db`). Admins can filter submissions, inspect every field, monitor recent voice recognition logs, use the live feed status, and export CSV from `/admin/dashboard`. Set `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_ROLE` in production; the development defaults are only for local testing.
 
+## High-accuracy server speech recognition
+
+The app now defaults to the server Whisper backend for higher accuracy. Browser speech recognition remains available by setting `VOICE_ENGINE=browser`. The first Whisper request downloads the selected model from Hugging Face and can take time.
+
+After changing this configuration, stop the old Flask process with `Ctrl+C` and start it again. Visit `/api/voice-config` to confirm that `engine` is `whisper` and `model` is `large-v3`. Keep the first voice request open while the model downloads and initializes; later requests use the cached warm model.
+
+```powershell
+python -m pip install -r requirements-voice.txt
+$env:VOICE_ENGINE="whisper"
+$env:WHISPER_MODEL="large-v3"
+$env:WHISPER_DEVICE="cpu"
+$env:WHISPER_COMPUTE_TYPE="int8"
+$env:VOICE_MAX_SECONDS="15"
+python app.py
+```
+
+Use `medium` or `large-v3` for higher accuracy when the machine has enough RAM/GPU; use `tiny` or `base` for lower latency. The server recorder captures up to 15 seconds by default, uses browser echo cancellation/noise suppression and automatic gain control, applies server-side VAD, and stops after sustained silence. Configure `VOICE_MAX_SECONDS` from 10 to 60 seconds and `VOICE_MIN_CONFIDENCE` for uncertainty handling.
+
+The diagnostic endpoint is `/api/voice-config`. Recognition failures are categorized as `microphone-denied`, `no-speech`, `model-uncertainty`, `server-asr-disabled`, `model-unavailable`, `network-error`, or `transcription-error`, and are stored in the admin voice log. The visible form remains available as the final fallback. For production, put Whisper behind a worker queue, keep the model warm, use GPU batching where available, and enforce upload size/type limits at the reverse proxy.
+
 ## Connect deployed services
 
 Set the deployed URLs before starting the app:

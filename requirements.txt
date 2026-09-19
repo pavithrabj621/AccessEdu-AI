@@ -1,1 +1,4 @@
 Flask>=3.0.0,<4.0.0
+
+# Optional server ASR is installed separately because it downloads model/runtime assets.
+# See requirements-voice.txt and set VOICE_ENGINE=whisper.

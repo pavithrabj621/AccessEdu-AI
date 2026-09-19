@@ -3,6 +3,7 @@ import csv
 import io
 import os
 import sqlite3
+import tempfile
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask, render_template, request, jsonify, g, session, redirect, url_for, make_response
@@ -13,6 +14,15 @@ DATABASE = os.path.join(os.path.dirname(__file__), "aeaccessedu.db")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 ADMIN_ROLE = os.getenv("ADMIN_ROLE", "administrator")
+VOICE_ENGINE = os.getenv("VOICE_ENGINE", "whisper").lower()
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "large-v3").strip()
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu").strip()
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8").strip()
+VOICE_MAX_SECONDS = max(10, min(60, int(os.getenv("VOICE_MAX_SECONDS", "15"))))
+VOICE_MIN_CONFIDENCE = float(os.getenv("VOICE_MIN_CONFIDENCE", "0.45"))
+TTS_RATE = max(0.5, min(1.5, float(os.getenv("TTS_RATE", "0.95"))))
+TTS_PITCH = max(0.5, min(2.0, float(os.getenv("TTS_PITCH", "1.0"))))
+_whisper_model = None
 
 # Add your deployed URLs in environment variables or edit these defaults.
 ACCESSPATH_AI_URL = os.getenv("ACCESSPATH_AI_URL", "https://accesspath-three.vercel.app/")
@@ -25,6 +35,24 @@ def get_db():
         g.db = sqlite3.connect(DATABASE)
         g.db.row_factory = sqlite3.Row
     return g.db
+
+
+def get_whisper_model():
+    global _whisper_model
+    if _whisper_model is not None:
+        return _whisper_model
+    if VOICE_ENGINE != "whisper":
+        return None
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as error:
+        raise RuntimeError("Whisper is not installed. Install requirements-voice.txt or set VOICE_ENGINE=browser.") from error
+    _whisper_model = WhisperModel(
+        WHISPER_MODEL,
+        device=WHISPER_DEVICE,
+        compute_type=WHISPER_COMPUTE_TYPE,
+    )
+    return _whisper_model
 
 
 @app.teardown_appcontext
@@ -123,6 +151,10 @@ def index():
         accesspath_url=ACCESSPATH_AI_URL,
         academic_bot_url=ACADEMIC_BOT_URL,
         announcements_url=ANNOUNCEMENTS_URL,
+        voice_engine=VOICE_ENGINE,
+        voice_max_seconds=VOICE_MAX_SECONDS,
+        tts_rate=TTS_RATE,
+        tts_pitch=TTS_PITCH,
     )
 
 
@@ -133,6 +165,10 @@ def outpass_tool():
         tool_name="Outpass",
         tool_icon="🚪",
         tool_description="Request permission to leave campus and track your outpass request.",
+        voice_engine=VOICE_ENGINE,
+        voice_max_seconds=VOICE_MAX_SECONDS,
+        tts_rate=TTS_RATE,
+        tts_pitch=TTS_PITCH,
     )
 
 
@@ -143,6 +179,10 @@ def exam_booking_tool():
         tool_name="Exam Booking",
         tool_icon="🗓",
         tool_description="Reserve an accessible exam or counter slot with the support you need.",
+        voice_engine=VOICE_ENGINE,
+        voice_max_seconds=VOICE_MAX_SECONDS,
+        tts_rate=TTS_RATE,
+        tts_pitch=TTS_PITCH,
     )
 
 
@@ -153,6 +193,10 @@ def food_ordering_tool():
         tool_name="Food Ordering",
         tool_icon="🍱",
         tool_description="Place a campus food order and request delivery or accessibility support.",
+        voice_engine=VOICE_ENGINE,
+        voice_max_seconds=VOICE_MAX_SECONDS,
+        tts_rate=TTS_RATE,
+        tts_pitch=TTS_PITCH,
     )
 
 
@@ -163,6 +207,10 @@ def marketplace_tool():
         tool_name="Marketplace",
         tool_icon="📚",
         tool_description="Buy, sell, or exchange books, devices, and other campus essentials.",
+        voice_engine=VOICE_ENGINE,
+        voice_max_seconds=VOICE_MAX_SECONDS,
+        tts_rate=TTS_RATE,
+        tts_pitch=TTS_PITCH,
     )
 
 
@@ -346,6 +394,81 @@ def create_voice_log():
     )
     get_db().commit()
     return jsonify({"ok": True})
+
+
+@app.get("/api/voice-config")
+def voice_config():
+    return jsonify({
+        "engine": VOICE_ENGINE,
+        "model": WHISPER_MODEL if VOICE_ENGINE == "whisper" else None,
+        "device": WHISPER_DEVICE if VOICE_ENGINE == "whisper" else None,
+        "max_seconds": VOICE_MAX_SECONDS,
+        "min_confidence": VOICE_MIN_CONFIDENCE,
+        "tts_rate": TTS_RATE,
+        "tts_pitch": TTS_PITCH,
+        "server_asr_available": VOICE_ENGINE == "whisper",
+    })
+
+
+@app.post("/api/transcribe")
+def transcribe_audio():
+    audio = request.files.get("audio")
+    if not audio:
+        return jsonify({"ok": False, "reason": "missing-audio", "message": "No audio was received."}), 400
+    if VOICE_ENGINE != "whisper":
+        return jsonify({
+            "ok": False,
+            "reason": "server-asr-disabled",
+            "message": "Server speech recognition is disabled. Browser recognition remains available.",
+        }), 503
+    if not audio.filename:
+        return jsonify({"ok": False, "reason": "invalid-audio", "message": "The audio file has no name."}), 400
+
+    suffix = os.path.splitext(audio.filename)[1].lower() or ".webm"
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_path = temp_file.name
+            audio.save(temp_path)
+        model = get_whisper_model()
+        segments, info = model.transcribe(
+            temp_path,
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 700},
+            condition_on_previous_text=False,
+            temperature=0.0,
+        )
+        transcript_parts = []
+        segment_confidences = []
+        for segment in segments:
+            text = segment.text.strip()
+            if text:
+                transcript_parts.append(text)
+                segment_confidences.append(max(0.0, min(1.0, 1.0 + float(segment.avg_logprob))))
+        transcript = " ".join(transcript_parts).strip()
+        confidence = sum(segment_confidences) / len(segment_confidences) if segment_confidences else 0.0
+        if not transcript:
+            reason = "no-speech"
+            message = "No clear speech was detected. Move closer to the microphone and try again."
+        elif confidence < VOICE_MIN_CONFIDENCE:
+            reason = "model-uncertainty"
+            message = "The audio was unclear. Please repeat slowly in a quieter place."
+        else:
+            reason = "recognized"
+            message = "Speech recognized."
+        return jsonify({"ok": reason == "recognized", "transcript": transcript, "confidence": confidence, "reason": reason, "message": message, "language": info.language})
+    except RuntimeError as error:
+        return jsonify({"ok": False, "reason": "model-unavailable", "message": str(error)}), 503
+    except Exception:
+        app.logger.exception("Audio transcription failed")
+        return jsonify({"ok": False, "reason": "transcription-error", "message": "The audio could not be processed. Try again or use typed input."}), 500
+    finally:
+        if temp_path:
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 
 @app.post("/api/sos")

@@ -6,7 +6,7 @@
   <title>{{ tool_name }} | AccessEdu AI</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
-<body data-tool-page="{{ tool_name }}">
+<body data-tool-page="{{ tool_name }}" data-voice-engine="{{ voice_engine }}" data-voice-max-seconds="{{ voice_max_seconds }}" data-tts-rate="{{ tts_rate }}" data-tts-pitch="{{ tts_pitch }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <header class="topbar">
     <div class="brand"><div class="brand-mark" aria-hidden="true">&#9672;</div><div><strong>AccessEdu AI</strong><span>Paavai Engineering College</span></div></div>
@@ -46,6 +46,7 @@
   </main>
   <footer class="site-footer"><span>AccessEdu AI</span><span aria-hidden="true">&#8226;</span><span>Accessible campus services</span></footer>
   <div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='js/server_voice.js') }}"></script>
   <script src="{{ url_for('static', filename='js/toolkit.js') }}"></script>
 </body>
 </html>

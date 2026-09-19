@@ -171,9 +171,14 @@
     window.APP_CONFIG = {
       accesspathUrl: {{ accesspath_url|tojson }},
       academicBotUrl: {{ academic_bot_url|tojson }},
-      announcementsUrl: {{ announcements_url|tojson }}
+      announcementsUrl: {{ announcements_url|tojson }},
+      voiceEngine: {{ voice_engine|tojson }},
+      voiceMaxSeconds: {{ voice_max_seconds|tojson }}
+      ,ttsRate: {{ tts_rate|tojson }},
+      ttsPitch: {{ tts_pitch|tojson }}
     };
   </script>
+  <script src="{{ url_for('static', filename='js/server_voice.js') }}"></script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
