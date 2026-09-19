@@ -13,13 +13,41 @@
   let questionIndex = 0;
   let pendingAnswer = "";
 
-  const announce = (message) => {
+  const stopVoiceSession = () => {
+    voiceEnabled = false;
+    clearTimeout(restartTimer);
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognition = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  window.addEventListener("pagehide", stopVoiceSession);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      stopVoiceSession();
+      voiceStatus.textContent = "Voice paused while this tab is hidden.";
+      return;
+    }
+    voiceEnabled = true;
+    announce("How can I help you?", startRecognition);
+  });
+
+  const announce = (message, onDone = null) => {
     liveRegion.textContent = message;
-    if (!("speechSynthesis" in window)) return;
+    if (!("speechSynthesis" in window)) {
+      onDone?.();
+      return;
+    }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.rate = 0.9;
-    utterance.onend = () => { if (voiceEnabled && !recognition) startRecognition(); };
+    utterance.onend = () => {
+      onDone?.();
+      if (voiceEnabled && !recognition) startRecognition();
+    };
     window.speechSynthesis.speak(utterance);
   };
   const normalize = (value = "") => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
@@ -94,8 +122,7 @@
   };
 
   const stopRecognition = () => {
-    clearTimeout(restartTimer);
-    if (recognition) { recognition.onend = null; recognition.stop(); recognition = null; }
+    stopVoiceSession();
   };
   const startRecognition = () => {
     if (!voiceEnabled || recognition) return;
@@ -135,5 +162,5 @@
   form.addEventListener("submit", (event) => { event.preventDefault(); submitForm(); });
 
   voiceEnabled = true;
-  announce("There are some basic questions. Would you like to answer them?");
+  announce("There are some basic questions. Would you like to answer them?", startRecognition);
 })();

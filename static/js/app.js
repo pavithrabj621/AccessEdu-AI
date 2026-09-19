@@ -21,6 +21,21 @@
 
   window.addEventListener("pagehide", stopVoiceSession);
 
+  const resumeHomeVoice = () => {
+    if (document.visibilityState !== "visible") return;
+    voiceStatus.textContent = "Preparing voice assistant...";
+    announce("How can I help you?", () => startVoice(true));
+  };
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      stopVoiceSession();
+      voiceStatus.textContent = "Voice paused while this tab is hidden.";
+      return;
+    }
+    resumeHomeVoice();
+  });
+
   const announce = (message, onDone = null) => {
     liveRegion.textContent = message;
     if ("speechSynthesis" in window) {
@@ -77,6 +92,7 @@
   const openToolkitPage = (text) => {
     const match = Object.entries(toolkitPages).find(([phrase]) => text.includes(phrase));
     if (match) {
+      stopVoiceSession();
       window.location.href = match[1];
       announce(`Opening ${match[0]}`);
       return true;
@@ -427,12 +443,14 @@
     if (activeItem) activeItem.classList.add("active");
 
     if (action === "academic-bot") {
+      stopVoiceSession();
       window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
       announce("Opening Academic Bot");
       return;
     }
 
     if (action === "accesspath-ai") {
+      stopVoiceSession();
       window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
       announce("Opening AccessPath AI");
       return;
@@ -460,5 +478,5 @@
   });
 
   voiceStatus.textContent = "Listening. Say a command.";
-  announce("How can I help you?", () => startVoice(true));
+  resumeHomeVoice();
 })();
