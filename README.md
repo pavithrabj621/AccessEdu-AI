@@ -45,6 +45,14 @@ Each toolkit service has its own accessible page:
 
 On any toolkit page, select **Voice** and say `help` for the available commands. You can navigate between services, read the page, change text size or contrast, and submit the current form by voice. Browser speech recognition requires microphone permission and support from the browser.
 
+## Voice-first flow
+
+The home page speaks exactly `How can I help you?` after each reload, then starts listening after the greeting finishes. Say `campus toolkit` to hear `What feature would you like to use?`, then say `outpass`, `exam booking`, `food ordering`, or `marketplace`.
+
+Toolkit pages ask permission before collecting answers. A voice answer is shown in the form and confirmed, questions are asked one at a time, and the complete response is read back before submission. Low-confidence results are logged and replayed with `I didn't catch that, could you repeat?`.
+
+Toolkit submissions are stored as structured JSON in the local SQLite database (`aeaccessedu.db`). Admins can filter submissions, inspect every field, monitor recent voice recognition logs, use the live feed status, and export CSV from `/admin/dashboard`. Set `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `ADMIN_ROLE` in production; the development defaults are only for local testing.
+
 ## Connect deployed services
 
 Set the deployed URLs before starting the app:

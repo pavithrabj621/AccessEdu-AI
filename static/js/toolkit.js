@@ -5,151 +5,135 @@
   const result = document.getElementById("toolResult");
   const voiceStatus = document.getElementById("voiceStatus");
   const liveRegion = document.getElementById("liveRegion");
-  const pageName = body.dataset.toolPage;
   let fontScale = 1;
   let recognition = null;
+  let voiceEnabled = false;
+  let restartTimer = null;
+  let state = "consent";
+  let questionIndex = 0;
+  let pendingAnswer = "";
 
   const announce = (message) => {
     liveRegion.textContent = message;
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.rate = 0.95;
-      window.speechSynthesis.speak(utterance);
-    }
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 0.9;
+    utterance.onend = () => { if (voiceEnabled && !recognition) startRecognition(); };
+    window.speechSynthesis.speak(utterance);
   };
-
   const normalize = (value = "") => value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-  const includesAny = (text, phrases) => phrases.some((phrase) => text.includes(phrase));
-  const go = (path, message) => {
-    announce(message);
-    window.location.href = path;
+  const isYes = (text) => /^(yes|yeah|yep|correct|right|sure|okay|ok|submit|confirm)\b/.test(normalize(text));
+  const isNo = (text) => /^(no|nope|wrong|incorrect|change|edit|again)\b/.test(normalize(text));
+  const logVoiceEvent = (transcript, confidence, eventType) => {
+    fetch("/api/voice-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page: window.location.pathname, transcript, confidence, event_type: eventType }) }).catch(() => {});
+  };
+  const fields = () => Array.from(form.querySelectorAll("input, select, textarea"));
+  const fieldLabel = (field) => form.querySelector(`label[for="${field.id}"]`)?.textContent.trim() || field.name;
+  const fieldValue = (field) => field.value.trim();
+  const currentQuestion = () => fields()[questionIndex];
+
+  const askCurrentQuestion = () => {
+    const field = currentQuestion();
+    if (!field) {
+      state = "review";
+      const summary = fields().map((item) => `${fieldLabel(item)}: ${fieldValue(item) || "not provided"}`).join(". ");
+      announce(`Here are the details you provided: ${summary}. Is everything correct?`);
+      return;
+    }
+    state = "answer";
+    field.focus();
+    announce(`${fieldLabel(field)}. Please answer.`);
   };
 
-  document.getElementById("contrastBtn").addEventListener("click", () => {
-    body.classList.toggle("high-contrast");
-    announce(body.classList.contains("high-contrast") ? "High contrast enabled" : "High contrast disabled");
-  });
-  document.getElementById("fontUp").addEventListener("click", () => {
-    fontScale = Math.min(1.3, +(fontScale + 0.1).toFixed(1));
-    root.style.setProperty("--font-scale", fontScale);
-    announce("Text size increased");
-  });
-  document.getElementById("fontDown").addEventListener("click", () => {
-    fontScale = Math.max(0.9, +(fontScale - 0.1).toFixed(1));
-    root.style.setProperty("--font-scale", fontScale);
-    announce("Text size decreased");
-  });
-  document.getElementById("readPageBtn").addEventListener("click", () => announce(document.querySelector("main").innerText));
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  const submitForm = async () => {
     const data = Object.fromEntries(new FormData(form).entries());
-    result.textContent = "Submitting your request...";
+    result.textContent = "Submitting...";
     try {
-      const response = await fetch("/api/request", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ request_type: form.dataset.requestType, source: "Campus Toolkit", ...data })
-      });
-      const request = await response.json();
-      result.textContent = `${form.dataset.requestType} request created. Reference #${request.id}. Status: ${request.status}.`;
-      announce(result.textContent);
+      const response = await fetch("/api/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ request_type: form.dataset.requestType, source: "Campus Toolkit Voice", completion_mode: "voice", ...data }) });
+      const saved = await response.json();
+      state = "done";
+      result.textContent = `${form.dataset.requestType} submitted. Reference #${saved.id}.`;
+      announce(`Submitted. Reference number ${saved.id}.`);
     } catch {
-      result.textContent = "The request could not be submitted. Please try again.";
-      announce(result.textContent);
+      state = "review";
+      result.textContent = "Submission failed. Say submit again.";
+      announce("Submission failed. Say submit again.");
     }
-  });
-
-  const runCommand = (command) => {
-    const text = normalize(command);
-    if (includesAny(text, ["help", "what can i say", "commands"])) {
-      announce("You can say read page, submit request, go home, go to outpass, exam booking, food ordering, or marketplace. You can also say increase text or high contrast.");
-      return;
-    }
-    if (includesAny(text, ["submit", "send request", "complete request"])) {
-      form.requestSubmit();
-      return;
-    }
-    if (includesAny(text, ["read page", "read this", "read form"])) {
-      announce(document.querySelector("main").innerText);
-      return;
-    }
-    if (includesAny(text, ["high contrast", "contrast mode"])) {
-      document.getElementById("contrastBtn").click();
-      return;
-    }
-    if (includesAny(text, ["increase text", "bigger text", "larger text"])) {
-      document.getElementById("fontUp").click();
-      return;
-    }
-    if (includesAny(text, ["decrease text", "smaller text"])) {
-      document.getElementById("fontDown").click();
-      return;
-    }
-    if (includesAny(text, ["go home", "open home", "main page"])) {
-      go("/", "Opening the AccessEdu home page");
-      return;
-    }
-    if (includesAny(text, ["outpass", "out pass"])) {
-      go("/toolkit/outpass", "Opening Outpass");
-      return;
-    }
-    if (includesAny(text, ["exam booking", "exam", "counter slot"])) {
-      go("/toolkit/exam-booking", "Opening Exam Booking");
-      return;
-    }
-    if (includesAny(text, ["food ordering", "food order", "canteen", "food"])) {
-      go("/toolkit/food-ordering", "Opening Food Ordering");
-      return;
-    }
-    if (includesAny(text, ["marketplace", "market place", "buy and sell"])) {
-      go("/toolkit/marketplace", "Opening Marketplace");
-      return;
-    }
-    announce("Command not recognized. Say help for available voice commands.");
   };
 
-  const startVoice = () => {
+  const handleAnswer = (transcript) => {
+    if (state === "consent") {
+      if (isYes(transcript)) { questionIndex = 0; askCurrentQuestion(); }
+      else if (isNo(transcript)) { state = "manual"; announce("Okay. You can complete the form manually."); }
+      else announce("Please say yes or no.");
+      return;
+    }
+    if (state === "answer") {
+      pendingAnswer = transcript.trim();
+      const field = currentQuestion();
+      if (field.tagName === "SELECT") {
+        const option = Array.from(field.options).find((item) => normalize(item.textContent) === normalize(pendingAnswer) || normalize(item.value) === normalize(pendingAnswer));
+        if (option) pendingAnswer = option.value;
+      }
+      field.value = pendingAnswer;
+      state = "confirm-answer";
+      announce(`I heard ${pendingAnswer}. Is that correct?`);
+      return;
+    }
+    if (state === "confirm-answer") {
+      if (isYes(transcript)) { questionIndex += 1; askCurrentQuestion(); }
+      else if (isNo(transcript)) askCurrentQuestion();
+      else announce("Please say yes or no.");
+      return;
+    }
+    if (state === "review") {
+      if (isYes(transcript)) submitForm();
+      else announce("Please say yes to submit or no to stop.");
+    }
+  };
+
+  const stopRecognition = () => {
+    clearTimeout(restartTimer);
+    if (recognition) { recognition.onend = null; recognition.stop(); recognition = null; }
+  };
+  const startRecognition = () => {
+    if (!voiceEnabled || recognition) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      voiceStatus.textContent = "Speech recognition is not supported in this browser. Use the Read button for voice output.";
-      announce(voiceStatus.textContent);
-      return;
-    }
-    if (recognition) {
-      recognition.stop();
-      recognition = null;
-      voiceStatus.textContent = "Voice assistant stopped.";
-      announce("Voice assistant stopped");
-      return;
-    }
+    if (!SpeechRecognition) { voiceStatus.textContent = "Speech recognition is unavailable. Use the visible form."; return; }
     recognition = new SpeechRecognition();
     recognition.lang = "en-IN";
-    recognition.interimResults = false;
     recognition.continuous = true;
-    recognition.onstart = () => {
-      voiceStatus.textContent = "Listening. Say help for commands.";
-      announce("Listening");
-    };
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 5;
+    recognition.onstart = () => { voiceStatus.textContent = "Listening"; };
     recognition.onresult = (event) => {
-      const resultItem = event.results[event.results.length - 1];
-      const transcript = resultItem?.[0]?.transcript?.trim();
-      if (transcript) {
+      let interim = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const item = event.results[index];
+        const transcript = item[0]?.transcript?.trim() || "";
+        if (!transcript) continue;
+        if (!item.isFinal) { interim += `${transcript} `; continue; }
+        const confidence = item[0]?.confidence ?? 1;
+        logVoiceEvent(transcript, confidence, confidence < 0.45 ? "low-confidence" : "recognized");
+        if (confidence < 0.45) { announce("I didn't catch that, could you repeat?"); continue; }
         voiceStatus.textContent = `Heard: ${transcript}`;
-        runCommand(transcript);
+        handleAnswer(transcript);
       }
+      if (interim.trim()) voiceStatus.textContent = `Listening: ${interim.trim()}`;
     };
-    recognition.onerror = () => {
-      voiceStatus.textContent = "Voice input ended. Check microphone permission.";
-    };
-    recognition.onend = () => {
-      recognition = null;
-      voiceStatus.textContent = "Voice assistant ready. Select Voice to listen again.";
-    };
-    recognition.start();
+    recognition.onerror = () => { voiceStatus.textContent = "Listening paused. Check microphone permission."; };
+    recognition.onend = () => { recognition = null; if (voiceEnabled) restartTimer = setTimeout(startRecognition, 250); };
+    try { recognition.start(); } catch { recognition = null; }
   };
 
-  document.getElementById("voiceBtn").addEventListener("click", startVoice);
-  announce(`${pageName} page ready. Say help for voice commands.`);
+  document.getElementById("contrastBtn").addEventListener("click", () => { body.classList.toggle("high-contrast"); announce(body.classList.contains("high-contrast") ? "High contrast enabled" : "High contrast disabled"); });
+  document.getElementById("fontUp").addEventListener("click", () => { fontScale = Math.min(1.3, +(fontScale + 0.1).toFixed(1)); root.style.setProperty("--font-scale", fontScale); });
+  document.getElementById("fontDown").addEventListener("click", () => { fontScale = Math.max(0.9, +(fontScale - 0.1).toFixed(1)); root.style.setProperty("--font-scale", fontScale); });
+  document.getElementById("readPageBtn").addEventListener("click", () => announce(document.querySelector("main").innerText));
+  document.getElementById("voiceBtn").addEventListener("click", () => { voiceEnabled = !voiceEnabled; if (voiceEnabled) { announce("Voice enabled"); startRecognition(); } else { stopRecognition(); announce("Voice paused"); } });
+  form.addEventListener("submit", (event) => { event.preventDefault(); submitForm(); });
+
+  voiceEnabled = true;
+  announce("There are some basic questions. Would you like to answer them?");
 })();

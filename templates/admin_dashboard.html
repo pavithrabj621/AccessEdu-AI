@@ -58,6 +58,20 @@
     .item h3 { margin: 0 0 8px; }
     .meta { color: #6f7078; font-size: .8rem; margin-top: 8px; }
     .logout { color: #8c0034; font-weight: 700; text-decoration: none; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 18px; }
+    .toolbar label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; font-weight: 700; }
+    .toolbar input, .toolbar select { min-height: 44px; width: auto; }
+    .secondary-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; background: #f8eaf0; color: #8c0034; border-radius: 12px; font-weight: 700; text-decoration: none; }
+    .metric-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .metric { background: #f8eaf0; color: #8c0034; border-radius: 10px; padding: 8px 10px; font-size: .82rem; font-weight: 700; }
+    .detail-list { display: grid; gap: 6px; margin: 12px 0 0; }
+    .detail-list div { display: grid; grid-template-columns: minmax(110px, .4fr) 1fr; gap: 10px; border-top: 1px solid #eeeef1; padding-top: 6px; }
+    .detail-list dt { color: #6f7078; font-weight: 700; }
+    .detail-list dd { margin: 0; overflow-wrap: anywhere; }
+    .empty { color: #6f7078; }
+    .log-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .log-table th, .log-table td { border-bottom: 1px solid #eeeef1; padding: 9px 6px; text-align: left; vertical-align: top; }
+    .log-table td:nth-child(2) { overflow-wrap: anywhere; }
     @media (max-width: 820px) {
       .grid { grid-template-columns: 1fr; }
       .summary { grid-template-columns: 1fr; }
@@ -137,6 +151,67 @@
         <button class="post-event-btn" id="openEventModal" type="button">Post New Event</button>
       </section>
     </div>
+
+    <section class="panel" style="margin-top:24px;">
+      <div class="item-header">
+        <div>
+          <h2 style="margin-top:0;">Voice submissions</h2>
+          <p class="intro">Structured answers collected by the toolkit voice flow.</p>
+          <p class="meta" id="liveSubmissionStatus">Live feed connected</p>
+        </div>
+        <a class="secondary-link" href="{{ url_for('export_requests_csv') }}">Export CSV</a>
+      </div>
+      <form class="toolbar" method="get" action="{{ url_for('admin_dashboard') }}">
+        <label>Feature
+          <select name="feature">
+            <option value="">All features</option>
+            {% for feature in ["Outpass", "Exam Booking", "Food Ordering", "Marketplace", "SOS"] %}
+              <option value="{{ feature }}"{% if filters.feature == feature %} selected{% endif %}>{{ feature }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Status
+          <select name="status">
+            <option value="">All statuses</option>
+            <option value="Submitted"{% if filters.status == "Submitted" %} selected{% endif %}>Submitted</option>
+          </select>
+        </label>
+        <label>From <input type="date" name="start" value="{{ filters.start }}"></label>
+        <label>To <input type="date" name="end" value="{{ filters.end }}"></label>
+        <button type="submit">Filter</button>
+        <a class="secondary-link" href="{{ url_for('admin_dashboard') }}">Clear</a>
+      </form>
+      <div class="metric-row" aria-label="Submission analytics">
+        {% for feature, count in feature_counts.items() %}<span class="metric">{{ feature }}: {{ count }}</span>{% endfor %}
+        {% for day, count in daily_counts.items() %}<span class="metric">{{ day }}: {{ count }}</span>{% endfor %}
+      </div>
+      <div class="list">
+        {% for item in submissions %}
+          <article class="item">
+            <div class="item-header"><h3>{{ item.request_type }} #{{ item.id }}</h3><span class="badge">{{ item.status }}</span></div>
+            <div class="meta">{{ item.created_at }} · {{ item.completion_mode }} · {{ item.source }}</div>
+            <dl class="detail-list">
+              {% for key, value in item.details.items() if key not in ["request_type", "source", "completion_mode"] %}
+                <div><dt>{{ key|replace('_', ' ')|title }}</dt><dd>{{ value }}</dd></div>
+              {% endfor %}
+            </dl>
+          </article>
+        {% else %}<p class="empty">No submissions match these filters.</p>{% endfor %}
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:24px;">
+      <h2 style="margin-top:0;">Voice interaction log</h2>
+      <p class="intro">Recent transcripts and confidence signals for troubleshooting recognition.</p>
+      <div style="overflow-x:auto;">
+        <table class="log-table">
+          <thead><tr><th>Time</th><th>Transcript</th><th>Confidence</th><th>Event</th></tr></thead>
+          <tbody>
+            {% for log in voice_logs %}<tr><td>{{ log.created_at }}</td><td>{{ log.transcript or "-" }}</td><td>{{ "%.2f"|format(log.confidence) if log.confidence is not none else "-" }}</td><td>{{ log.event_type }}</td></tr>{% else %}<tr><td colspan="4">No voice logs yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <div class="modal-backdrop{% if form_errors %} open{% endif %}" id="eventModal" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
@@ -217,6 +292,19 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && eventModal.classList.contains("open")) hideEventModal();
     });
+
+    const liveSubmissionStatus = document.getElementById("liveSubmissionStatus");
+    async function refreshSubmissionStatus() {
+      try {
+        const response = await fetch("{{ url_for('admin_submissions_api') }}", { cache: "no-store" });
+        const submissions = await response.json();
+        liveSubmissionStatus.textContent = `Live feed connected · ${submissions.length} recent submissions`;
+      } catch {
+        liveSubmissionStatus.textContent = "Live feed unavailable";
+      }
+    }
+    refreshSubmissionStatus();
+    window.setInterval(refreshSubmissionStatus, 10000);
   </script>
 </body>
 </html>

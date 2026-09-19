@@ -1,4 +1,6 @@
 import json
+import csv
+import io
 import os
 import sqlite3
 from datetime import datetime
@@ -10,6 +12,7 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-me")
 DATABASE = os.path.join(os.path.dirname(__file__), "aeaccessedu.db")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+ADMIN_ROLE = os.getenv("ADMIN_ROLE", "administrator")
 
 # Add your deployed URLs in environment variables or edit these defaults.
 ACCESSPATH_AI_URL = os.getenv("ACCESSPATH_AI_URL", "https://accesspath-three.vercel.app/")
@@ -55,6 +58,23 @@ def init_db():
             request_type TEXT NOT NULL,
             payload TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'Submitted',
+            created_at TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'web',
+            completion_mode TEXT NOT NULL DEFAULT 'voice'
+        )
+    """)
+    request_columns = {row[1] for row in db.execute("PRAGMA table_info(requests)").fetchall()}
+    if "source" not in request_columns:
+        db.execute("ALTER TABLE requests ADD COLUMN source TEXT NOT NULL DEFAULT 'web'")
+    if "completion_mode" not in request_columns:
+        db.execute("ALTER TABLE requests ADD COLUMN completion_mode TEXT NOT NULL DEFAULT 'voice'")
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS voice_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            page TEXT NOT NULL,
+            transcript TEXT,
+            confidence REAL,
+            event_type TEXT NOT NULL,
             created_at TEXT NOT NULL
         )
     """)
@@ -88,7 +108,7 @@ def init_db():
 
 def admin_required(view):
     def wrapped(*args, **kwargs):
-        if not session.get("admin_logged_in"):
+        if not session.get("admin_logged_in") or session.get("admin_role") != ADMIN_ROLE:
             return redirect(url_for("admin_login"))
         return view(*args, **kwargs)
 
@@ -154,6 +174,7 @@ def admin_login():
         password = request.form.get("password", "")
         if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
             session["admin_logged_in"] = True
+            session["admin_role"] = ADMIN_ROLE
             return redirect(url_for("admin_dashboard"))
         error = "Invalid username or password"
     response = make_response(render_template("admin_login.html", error=error))
@@ -170,10 +191,57 @@ def admin_logout():
 @app.route("/admin/dashboard")
 @admin_required
 def admin_dashboard():
-    rows = get_db().execute(
+    db = get_db()
+    rows = db.execute(
         "SELECT * FROM announcements ORDER BY id DESC"
     ).fetchall()
-    response = make_response(render_template("admin_dashboard.html", announcements=[dict(row) for row in rows]))
+    request_type = request.args.get("feature", "").strip()
+    status = request.args.get("status", "").strip()
+    start_date = request.args.get("start", "").strip()
+    end_date = request.args.get("end", "").strip()
+    conditions = []
+    values = []
+    if request_type:
+        conditions.append("request_type = ?")
+        values.append(request_type)
+    if status:
+        conditions.append("status = ?")
+        values.append(status)
+    if start_date:
+        conditions.append("date(created_at) >= date(?)")
+        values.append(start_date)
+    if end_date:
+        conditions.append("date(created_at) <= date(?)")
+        values.append(end_date)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    submission_rows = db.execute(
+        f"SELECT * FROM requests {where} ORDER BY id DESC", values
+    ).fetchall()
+    submissions = []
+    for row in submission_rows:
+        item = dict(row)
+        try:
+            item["details"] = json.loads(item["payload"])
+        except (TypeError, json.JSONDecodeError):
+            item["details"] = {"raw": item["payload"]}
+        submissions.append(item)
+    all_submissions = db.execute("SELECT request_type, status, created_at FROM requests ORDER BY id DESC").fetchall()
+    voice_logs = db.execute("SELECT * FROM voice_logs ORDER BY id DESC LIMIT 12").fetchall()
+    feature_counts = {}
+    daily_counts = {}
+    for row in all_submissions:
+        feature_counts[row["request_type"]] = feature_counts.get(row["request_type"], 0) + 1
+        day = row["created_at"][:10]
+        daily_counts[day] = daily_counts.get(day, 0) + 1
+    response = make_response(render_template(
+        "admin_dashboard.html",
+        announcements=[dict(row) for row in rows],
+        submissions=[dict(row) for row in submissions],
+        feature_counts=feature_counts,
+        daily_counts=dict(sorted(daily_counts.items(), reverse=True)[:7]),
+        voice_logs=[dict(row) for row in voice_logs],
+        filters={"feature": request_type, "status": status, "start": start_date, "end": end_date},
+    ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
@@ -207,6 +275,11 @@ def create_announcement():
             announcements=[dict(row) for row in rows],
             form_errors=errors,
             form_values=request.form,
+            submissions=[],
+            feature_counts={},
+            daily_counts={},
+            voice_logs=[],
+            filters={"feature": "", "status": "", "start": "", "end": ""},
         ), 400
 
     db = get_db()
@@ -232,12 +305,47 @@ def create_request():
     request_type = data.get("request_type", "General")
     payload = json.dumps(data, ensure_ascii=False)
     db = get_db()
+    source = data.get("source", "Campus Toolkit")
+    completion_mode = data.get("completion_mode", "voice")
     cursor = db.execute(
-        "INSERT INTO requests (request_type, payload, created_at) VALUES (?, ?, ?)",
-        (request_type, payload, datetime.now().isoformat(timespec="minutes")),
+        "INSERT INTO requests (request_type, payload, created_at, source, completion_mode) VALUES (?, ?, ?, ?, ?)",
+        (request_type, payload, datetime.now().isoformat(timespec="minutes"), source, completion_mode),
     )
     db.commit()
     return jsonify({"ok": True, "id": cursor.lastrowid, "status": "Submitted"})
+
+
+@app.get("/admin/export.csv")
+@admin_required
+def export_requests_csv():
+    rows = get_db().execute("SELECT * FROM requests ORDER BY id DESC").fetchall()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "feature", "status", "created_at", "source", "completion_mode", "payload"])
+    for row in rows:
+        writer.writerow([row["id"], row["request_type"], row["status"], row["created_at"], row["source"], row["completion_mode"], row["payload"]])
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = "attachment; filename=accessedu-submissions.csv"
+    return response
+
+
+@app.get("/api/admin/submissions")
+@admin_required
+def admin_submissions_api():
+    rows = get_db().execute("SELECT * FROM requests ORDER BY id DESC LIMIT 50").fetchall()
+    return jsonify([dict(row) for row in rows])
+
+
+@app.post("/api/voice-log")
+def create_voice_log():
+    data = request.get_json(silent=True) or {}
+    get_db().execute(
+        "INSERT INTO voice_logs (page, transcript, confidence, event_type, created_at) VALUES (?, ?, ?, ?, ?)",
+        (data.get("page", "/"), data.get("transcript", ""), data.get("confidence"), data.get("event_type", "recognized"), datetime.now().isoformat(timespec="minutes")),
+    )
+    get_db().commit()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/sos")

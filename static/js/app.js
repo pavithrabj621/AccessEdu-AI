@@ -4,17 +4,38 @@
   const voiceStatus = document.getElementById("voiceStatus");
   const liveRegion = document.getElementById("liveRegion");
 
-  const announce = (message) => {
+  let recognition = null;
+  let voiceEnabled = false;
+  let restartTimer = null;
+
+  const stopVoiceSession = () => {
+    voiceEnabled = false;
+    clearTimeout(restartTimer);
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognition = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  };
+
+  window.addEventListener("pagehide", stopVoiceSession);
+
+  const announce = (message, onDone = null) => {
     liveRegion.textContent = message;
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(message);
       utterance.rate = 0.95;
+      utterance.onend = () => onDone?.();
       window.speechSynthesis.speak(utterance);
+    } else {
+      onDone?.();
     }
   };
 
   const openAnnouncementWindow = () => {
+    stopVoiceSession();
     const url = window.APP_CONFIG?.announcementsUrl || "https://niviks20.github.io/announcement/";
     if (window.__accesseduAnnouncementsTab && !window.__accesseduAnnouncementsTab.closed) {
       window.__accesseduAnnouncementsTab.location.href = url;
@@ -209,6 +230,7 @@
     const text = normalizeSpeechText(command);
 
     if (hasAnyPhrase(text, ["close app", "close website", "exit app", "exit website", "goodbye", "bye", "close"])) {
+      stopVoiceSession();
       voiceStatus.textContent = "Closing AccessEdu AI.";
       announce("Goodbye. Closing AccessEdu AI.");
       setTimeout(() => {
@@ -226,19 +248,31 @@
       return;
     }
 
-    if (hasAnyPhrase(text, ["access path ai", "accesspath ai", "open access path", "access path", "navigate", "route", "campus map", "find path"])) {
+    if (toolkitChoicePending) {
+      if (openToolkitPage(text)) {
+        toolkitChoicePending = false;
+        return;
+      }
+      announce("Please say outpass, exam booking, food ordering, or marketplace.");
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["access path ai", "accesspath ai", "open access path", "access path", "accesspath", "navigate", "route", "campus map", "find path"])) {
+      stopVoiceSession();
       window.open(window.APP_CONFIG.accesspathUrl, "_blank", "noopener");
       announce("Opening AccessPath AI");
       return;
     }
 
     if (hasAnyPhrase(text, ["admin", "admin login", "login as admin", "open admin"])) {
+      stopVoiceSession();
       window.location.href = "/admin/login";
       announce("Opening admin login");
       return;
     }
 
     if (hasAnyPhrase(text, ["academic bot", "open bot", "academic", "study help", "ask question", "chatbot", "bot"])) {
+      stopVoiceSession();
       window.open(window.APP_CONFIG.academicBotUrl, "_blank", "noopener");
       announce("Opening Academic Bot");
       return;
@@ -255,8 +289,8 @@
     }
 
     if (hasAnyPhrase(text, ["toolkit", "tools", "campus toolkit"])) {
-      openPanel("toolkitPanel");
-      announce("Opening campus toolkit");
+      toolkitChoicePending = true;
+      announce("What feature would you like to use?");
       return;
     }
 
@@ -268,11 +302,17 @@
     announce("Command not recognized. Say Academic Bot, AccessPath AI, announcements, toolkit, or SOS.");
   }
 
-  let recognition = null;
-  let voiceEnabled = false;
-  let restartTimer = null;
   let lastCommand = "";
   let lastCommandAt = 0;
+  let toolkitChoicePending = false;
+
+  const logVoiceEvent = (transcript, confidence, eventType) => {
+    fetch("/api/voice-log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: window.location.pathname, transcript, confidence, event_type: eventType })
+    }).catch(() => {});
+  };
 
   const createRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -305,6 +345,13 @@
         if (speechResult.isFinal) {
           const now = Date.now();
           const normalized = normalizeSpeechText(transcript);
+          const confidence = speechResult[0]?.confidence ?? 1;
+          logVoiceEvent(transcript, confidence, confidence < 0.45 ? "low-confidence" : "recognized");
+          if (confidence < 0.45) {
+            voiceStatus.textContent = "I did not catch that.";
+            announce("I didn't catch that, could you repeat?");
+            continue;
+          }
           if (normalized && (normalized !== lastCommand || now - lastCommandAt > 1500)) {
             lastCommand = normalized;
             lastCommandAt = now;
@@ -354,12 +401,7 @@
   };
 
   const stopVoice = () => {
-    voiceEnabled = false;
-    clearTimeout(restartTimer);
-    if (recognition) {
-      recognition.stop();
-      recognition = null;
-    }
+    stopVoiceSession();
     voiceStatus.textContent = "Voice assistant paused. Select the microphone to resume.";
     document.getElementById("voiceBtn")?.setAttribute("aria-pressed", "false");
     announce("Voice assistant paused");
@@ -417,7 +459,6 @@
     item.addEventListener("click", () => handleBottomNavAction(item.dataset.action));
   });
 
-  announce("Welcome to AccessEdu AI platform. Tell me what you need.");
-  voiceStatus.textContent = "Voice assistant ready. Say a command like Academic Bot or SOS.";
-  startVoice(true);
+  voiceStatus.textContent = "Listening. Say a command.";
+  announce("How can I help you?", () => startVoice(true));
 })();
