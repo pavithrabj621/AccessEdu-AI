@@ -117,9 +117,20 @@
   };
 
   const handleAnswer = (transcript) => {
+    if (/\bhelp\b|what can i say|commands/.test(normalize(transcript))) {
+      announce("Say yes to answer questions, review it with me, or stop.");
+      return;
+    }
     if (/\bstop\b|stop speaking|stop listening|be quiet/.test(normalize(transcript))) {
       interruptCurrentTurn();
       return;
+    }
+    if (state === "answer" || state === "confirm-answer") {
+      if (/\breview\b|read it back|go through/.test(normalize(transcript))) {
+        questionIndex = fields().length;
+        askCurrentQuestion();
+        return;
+      }
     }
     if (state === "consent") {
       if (isYes(transcript)) { questionIndex = 0; askCurrentQuestion(); }
@@ -131,7 +142,12 @@
       pendingAnswer = transcript.trim();
       const field = currentQuestion();
       if (field.tagName === "SELECT") {
-        const option = Array.from(field.options).find((item) => normalize(item.textContent) === normalize(pendingAnswer) || normalize(item.value) === normalize(pendingAnswer));
+        const spoken = normalize(pendingAnswer);
+        const option = Array.from(field.options).find((item) => {
+          const label = normalize(item.textContent);
+          const value = normalize(item.value);
+          return label === spoken || value === spoken || spoken.includes(label) || spoken.includes(value);
+        });
         if (option) pendingAnswer = option.value;
       }
       field.value = pendingAnswer;
@@ -219,7 +235,9 @@
       }
       voiceStatus.textContent = "Listening...";
     };
-    recognition.onerror = () => { voiceStatus.textContent = "Listening paused. Check microphone permission."; };
+    recognition.onerror = (event) => {
+      voiceStatus.textContent = event.error === "not-allowed" ? "Allow microphone access, then try again." : "Listening again...";
+    };
     recognition.onend = () => { recognition = null; if (voiceEnabled) restartTimer = setTimeout(startRecognition, 250); };
     try { recognition.start(); } catch { recognition = null; }
   };

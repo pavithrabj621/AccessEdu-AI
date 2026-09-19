@@ -7,16 +7,19 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
-  <main class="section-shell tool-page" tabindex="-1">
+  <main class="section-shell tool-page toolkit-hub-page" tabindex="-1">
     <p class="eyebrow">Campus services</p>
     <h1>Campus Toolkit</h1>
-    <p class="hero-text">Choose a campus service.</p>
+    <p class="hero-text">Say digital outpass, exam booking, food ordering, or marketplace.</p>
+    <p class="voice-status" id="hubVoiceStatus" role="status" aria-live="polite">Preparing voice assistant...</p>
     <div class="toolkit-grid">
-      <a class="tool-item" href="{{ url_for('outpass_tool') }}"><span aria-hidden="true">🚪</span><span>Outpass</span></a>
-      <a class="tool-item" href="{{ url_for('exam_booking_tool') }}"><span aria-hidden="true">🗓</span><span>Exam booking</span></a>
-      <a class="tool-item" href="{{ url_for('food_ordering_tool') }}"><span aria-hidden="true">🍱</span><span>Food ordering</span></a>
-      <a class="tool-item" href="{{ url_for('marketplace_tool') }}"><span aria-hidden="true">📚</span><span>Marketplace</span></a>
+      <a class="tool-item" href="{{ url_for('outpass_tool') }}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🚪</span><span>Digital outpass</span></a>
+      <a class="tool-item" href="{{ url_for('exam_booking_tool') }}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🗓</span><span>Exam booking</span></a>
+      <a class="tool-item" href="{{ url_for('food_ordering_tool') }}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">🍱</span><span>Food ordering</span></a>
+      <a class="tool-item" href="{{ url_for('marketplace_tool') }}" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">📚</span><span>Marketplace</span></a>
     </div>
   </main>
+  <div class="sr-only" id="hubLiveRegion" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='js/toolkit_hub.js', v='2') }}"></script>
 </body>
 </html>

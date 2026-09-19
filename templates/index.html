@@ -167,6 +167,17 @@
   </footer>
 
   <div class="sr-only" id="liveRegion" aria-live="assertive"></div>
+  <div class="sos-modal-backdrop" id="sosModal" role="dialog" aria-modal="true" aria-labelledby="sosModalTitle">
+    <div class="sos-modal">
+      <div class="panel-heading">
+        <h2 id="sosModalTitle">SOS Emergency Alert</h2>
+        <button class="small-btn" id="closeSosModal" type="button" aria-label="Close SOS alert">×</button>
+      </div>
+      <p id="sosModalMessage" role="status" aria-live="polite">Creating your emergency alert...</p>
+      <p class="sos-location" id="sosLocationDetails"></p>
+      <button class="primary-btn" id="sosModalDone" type="button">Done</button>
+    </div>
+  </div>
   <script>
     window.APP_CONFIG = {
       accesspathUrl: {{ accesspath_url|tojson }},
@@ -179,6 +190,6 @@
     };
   </script>
   <script src="{{ url_for('static', filename='js/server_voice.js', v='9') }}"></script>
-  <script src="{{ url_for('static', filename='js/app.js', v='10') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js', v='13') }}"></script>
 </body>
 </html>

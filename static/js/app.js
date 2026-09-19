@@ -81,15 +81,12 @@
   const openAnnouncementWindow = () => {
     stopVoiceSession();
     const url = window.APP_CONFIG?.announcementsUrl || "https://niviks20.github.io/announcement/";
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      window.location.href = url;
-    }
+    window.open(url, "_blank");
   };
 
   const openFeatureTab = (url) => {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) window.location.href = url;
+    const opened = window.open(url, "_blank");
+    if (!opened) voiceStatus.textContent = "Allow popups to open this feature in a new tab.";
   };
 
   const openPanel = (id) => {
@@ -235,6 +232,14 @@
   });
 
   async function activateSOS() {
+    const sosModal = document.getElementById("sosModal");
+    const sosMessage = document.getElementById("sosModalMessage");
+    const sosLocationDetails = document.getElementById("sosLocationDetails");
+    const closeSosModal = () => sosModal?.classList.remove("open");
+    sosModal?.classList.add("open");
+    if (sosMessage) sosMessage.textContent = "Getting your current location...";
+    if (sosLocationDetails) sosLocationDetails.textContent = "";
+    announce("SOS alert. Getting your current location.");
     let location = null;
     if ("geolocation" in navigator) {
       try {
@@ -251,16 +256,33 @@
       } catch { location = null; }
     }
 
-    const response = await fetch("/api/sos", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ location, source: "Voice/UI SOS" })
-    });
-    const result = await response.json();
-    announce(result.message || "SOS request recorded");
+    let result;
+    try {
+      const response = await fetch("/api/sos", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ location, source: "Voice/UI SOS" })
+      });
+      result = await response.json();
+    } catch {
+      if (sosMessage) sosMessage.textContent = "The SOS alert could not be sent. Please call campus security directly.";
+      announce("SOS alert could not be sent.", closeSosModal);
+      return;
+    }
+    if (location) {
+      if (sosMessage) sosMessage.textContent = "Your SOS alert and current location were shared with college management.";
+      if (sosLocationDetails) sosLocationDetails.textContent = `Latitude: ${location.latitude.toFixed(6)} | Longitude: ${location.longitude.toFixed(6)}`;
+      announce("SOS alert sent. Your current location was shared with college management.", closeSosModal);
+    } else {
+      if (sosMessage) sosMessage.textContent = "SOS alert sent, but location permission was unavailable.";
+      if (sosLocationDetails) sosLocationDetails.textContent = "Location was not available on this device.";
+      announce("SOS alert sent. Location was not available.", closeSosModal);
+    }
   }
 
   document.getElementById("sosBtn").addEventListener("click", activateSOS);
+  document.getElementById("closeSosModal")?.addEventListener("click", () => document.getElementById("sosModal")?.classList.remove("open"));
+  document.getElementById("sosModalDone")?.addEventListener("click", () => document.getElementById("sosModal")?.classList.remove("open"));
 
   const normalizeSpeechText = (value = "") => value
     .toLowerCase()
@@ -372,6 +394,11 @@
 
     if (hasAnyPhrase(text, ["stop", "stop speaking", "stop listening", "be quiet"])) {
       interruptCurrentTurn();
+      return;
+    }
+
+    if (hasAnyPhrase(text, ["help", "voice help", "what can i say", "commands"])) {
+      announce("Say AccessPath, Academic Bot, SOS, announcements, or campus toolkit.");
       return;
     }
 
@@ -522,6 +549,8 @@
         voiceStatus.textContent = "No microphone was found.";
       } else if (event.error === "network") {
         voiceStatus.textContent = "Browser speech service is unavailable.";
+      } else {
+        voiceStatus.textContent = "Listening again...";
       }
     };
     recognition.onend = () => {
