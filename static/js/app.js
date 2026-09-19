@@ -38,14 +38,23 @@
 
   const announce = (message, onDone = null) => {
     liveRegion.textContent = message;
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognition = null;
+    }
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(message);
       utterance.rate = 0.95;
-      utterance.onend = () => onDone?.();
+      utterance.onend = () => {
+        onDone?.();
+        if (!onDone && voiceEnabled && !recognition) startVoice(true);
+      };
       window.speechSynthesis.speak(utterance);
     } else {
       onDone?.();
+      if (!onDone && voiceEnabled && !recognition) startVoice(true);
     }
   };
 
@@ -363,11 +372,6 @@
           const normalized = normalizeSpeechText(transcript);
           const confidence = speechResult[0]?.confidence ?? 1;
           logVoiceEvent(transcript, confidence, confidence < 0.45 ? "low-confidence" : "recognized");
-          if (confidence < 0.45) {
-            voiceStatus.textContent = "I did not catch that.";
-            announce("I didn't catch that, could you repeat?");
-            continue;
-          }
           if (normalized && (normalized !== lastCommand || now - lastCommandAt > 1500)) {
             lastCommand = normalized;
             lastCommandAt = now;

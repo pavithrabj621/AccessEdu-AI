@@ -37,8 +37,14 @@
 
   const announce = (message, onDone = null) => {
     liveRegion.textContent = message;
+    if (recognition) {
+      recognition.onend = null;
+      recognition.stop();
+      recognition = null;
+    }
     if (!("speechSynthesis" in window)) {
       onDone?.();
+      if (!onDone && voiceEnabled && !recognition) startRecognition();
       return;
     }
     window.speechSynthesis.cancel();
@@ -143,7 +149,6 @@
         if (!item.isFinal) { interim += `${transcript} `; continue; }
         const confidence = item[0]?.confidence ?? 1;
         logVoiceEvent(transcript, confidence, confidence < 0.45 ? "low-confidence" : "recognized");
-        if (confidence < 0.45) { announce("I didn't catch that, could you repeat?"); continue; }
         voiceStatus.textContent = `Heard: ${transcript}`;
         handleAnswer(transcript);
       }
